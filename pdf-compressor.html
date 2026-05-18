@@ -1,0 +1,680 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>PDF Compressor</title>
+
+  <!-- ── PWA / Add to Home Screen ── -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="PDF Compress">
+  <meta name="theme-color" content="#0d0d0d">
+  <link rel="apple-touch-icon" id="app-icon-link">
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #0d0d0d; --surface: #161616; --surface2: #1f1f1f; --border: #2c2c2c;
+      --text: #e2e2e2; --muted: #6b6b6b; --green: #4ade80; --green-dim: #14532d;
+      --amber: #fbbf24; --amber-dim: #78350f; --red: #f87171; --red-dim: #7f1d1d;
+      --blue: #60a5fa; --accent: #a78bfa;
+      --mono: 'IBM Plex Mono', monospace; --sans: 'IBM Plex Sans', sans-serif;
+    }
+    html, body { background: var(--bg); color: var(--text); font-family: var(--sans);
+      font-size: 15px; -webkit-font-smoothing: antialiased; }
+    body { display: flex; flex-direction: column; min-height: 100dvh;
+      padding-bottom: env(safe-area-inset-bottom, 16px); }
+
+    /* Header */
+    header { padding: 18px 20px 14px; border-bottom: 1px solid var(--border); }
+    .header-inner { max-width: 680px; margin: 0 auto; }
+    .header-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    .logo { display: flex; align-items: center; gap: 10px; }
+    .logo-mark { width: 30px; height: 30px; background: var(--accent); border-radius: 7px;
+      display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+    h1 { font-size: 17px; font-weight: 600; letter-spacing: -0.3px; }
+    .subtitle { font-size: 12px; color: var(--muted); margin-top: 1px; }
+    .install-btn { background: var(--surface2); border: 1px solid var(--border); color: var(--muted);
+      border-radius: 8px; padding: 6px 11px; font-size: 12px; font-family: var(--sans);
+      cursor: pointer; white-space: nowrap; display: flex; align-items: center; gap: 5px;
+      transition: color 0.15s, border-color 0.15s; flex-shrink: 0; }
+    .install-btn:hover { color: var(--text); border-color: var(--muted); }
+
+    /* Modal */
+    .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.75);
+      display: flex; align-items: flex-end; justify-content: center;
+      z-index: 100; opacity: 0; pointer-events: none; transition: opacity 0.2s; }
+    .modal-overlay.open { opacity: 1; pointer-events: all; }
+    .modal-sheet { background: var(--surface); border-radius: 20px 20px 0 0; width: 100%;
+      max-width: 680px; padding: 22px 22px 36px; transform: translateY(20px);
+      transition: transform 0.2s; border-top: 1px solid var(--border); }
+    .modal-overlay.open .modal-sheet { transform: translateY(0); }
+    .modal-title { font-size: 16px; font-weight: 600; margin-bottom: 18px;
+      display: flex; align-items: center; justify-content: space-between; }
+    .modal-close { background: var(--surface2); border: none; color: var(--muted);
+      width: 28px; height: 28px; border-radius: 50%; cursor: pointer; font-size: 15px;
+      display: flex; align-items: center; justify-content: center; font-family: var(--sans); }
+    .install-steps { display: flex; flex-direction: column; gap: 14px; }
+    .install-step { display: flex; gap: 14px; align-items: flex-start; }
+    .step-num { width: 26px; height: 26px; background: rgba(167,139,250,0.15); color: var(--accent);
+      border-radius: 50%; display: flex; align-items: center; justify-content: center;
+      font-size: 12px; font-weight: 600; flex-shrink: 0; }
+    .step-text { font-size: 14px; line-height: 1.55; color: var(--text); padding-top: 3px; }
+    .step-text strong { color: var(--accent); }
+    .install-note { margin-top: 18px; font-size: 12px; color: var(--muted);
+      background: var(--surface2); border-radius: 8px; padding: 11px 13px; line-height: 1.6; }
+
+    /* Main */
+    main { flex: 1; padding: 16px 20px 20px; max-width: 680px; width: 100%; margin: 0 auto; }
+
+    /* Drop zone */
+    .drop-zone { border: 2px dashed var(--border); border-radius: 14px; padding: 30px 24px;
+      text-align: center; cursor: pointer; transition: border-color 0.2s, background 0.2s;
+      position: relative; margin-bottom: 14px; }
+    .drop-zone.drag-over { border-color: var(--accent); background: rgba(167,139,250,0.05); }
+    .drop-zone input[type="file"] { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
+    .drop-icon { width: 42px; height: 42px; background: var(--surface2); border-radius: 10px;
+      display: flex; align-items: center; justify-content: center; margin: 0 auto 11px; }
+    .drop-icon svg { width: 21px; height: 21px; color: var(--accent); }
+    .drop-label { font-size: 15px; font-weight: 500; margin-bottom: 4px; }
+    .drop-sub { font-size: 13px; color: var(--muted); }
+    .drop-sub span { font-family: var(--mono); color: var(--accent); }
+
+    /* Results panel */
+    #results-panel { display: none; background: var(--surface); border: 1px solid var(--green-dim);
+      border-radius: 13px; padding: 15px; margin-bottom: 14px; }
+    #results-panel.visible { display: block; }
+    .results-title { font-size: 14px; font-weight: 600; color: var(--green); margin-bottom: 10px;
+      display: flex; align-items: center; gap: 7px; }
+    .results-stats { font-size: 12px; color: var(--muted); margin-bottom: 13px; font-family: var(--mono); }
+    .results-stats span { color: var(--text); }
+    .dl-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+    .dl-zip-btn, .dl-ind-btn { flex: 1; min-width: 130px; display: flex; align-items: center;
+      justify-content: center; gap: 7px; border-radius: 9px; padding: 11px 14px;
+      font-size: 14px; font-weight: 500; cursor: pointer; font-family: var(--sans);
+      transition: opacity 0.15s; }
+    .dl-zip-btn { background: var(--accent); color: #0d0d0d; border: none; }
+    .dl-zip-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+    .dl-ind-btn { background: var(--surface2); color: var(--text);
+      border: 1px solid var(--border); }
+    .dl-ind-btn:hover { background: var(--border); }
+
+    /* File list */
+    #file-list { display: flex; flex-direction: column; gap: 9px; }
+    .file-card { background: var(--surface); border: 1px solid var(--border);
+      border-radius: 12px; padding: 12px 13px; transition: border-color 0.25s; }
+    .file-card.done-ok   { border-color: var(--green-dim); }
+    .file-card.done-warn { border-color: var(--amber-dim); }
+    .file-card.done-err  { border-color: var(--red-dim); }
+    .file-card.processing { border-color: var(--accent); }
+    .file-top { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 8px; }
+    .file-icon { width: 32px; height: 32px; background: var(--surface2); border-radius: 7px;
+      display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+    .file-icon svg { width: 15px; height: 15px; color: var(--muted); }
+    .file-name-wrap { flex: 1; min-width: 0; }
+    .file-name { font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden;
+      text-overflow: ellipsis; margin-bottom: 4px; }
+    .file-meta { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+    .size-orig, .size-final { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+    .size-final.reduced { color: var(--green); }
+    .arr { color: var(--muted); font-size: 11px; }
+    .status-badge { font-size: 11px; font-weight: 500; padding: 2px 7px; border-radius: 20px; white-space: nowrap; }
+    .badge-pending { background: var(--surface2); color: var(--muted); border: 1px solid var(--border); }
+    .badge-skip    { background: rgba(96,165,250,.12); color: var(--blue); border: 1px solid rgba(96,165,250,.2); }
+    .badge-ok      { background: rgba(74,222,128,.12); color: var(--green); border: 1px solid rgba(74,222,128,.2); }
+    .badge-warn    { background: rgba(251,191,36,.12); color: var(--amber); border: 1px solid rgba(251,191,36,.2); }
+    .badge-err     { background: rgba(248,113,113,.12); color: var(--red); border: 1px solid rgba(248,113,113,.2); }
+    .badge-working { background: rgba(167,139,250,.12); color: var(--accent); border: 1px solid rgba(167,139,250,.2); }
+    .remove-btn { background: none; border: none; cursor: pointer; color: var(--muted);
+      padding: 4px; border-radius: 4px; flex-shrink: 0; transition: color 0.15s; }
+    .remove-btn:hover { color: var(--red); }
+    .progress-wrap { display: none; flex-direction: column; gap: 5px; }
+    .progress-wrap.visible { display: flex; }
+    .progress-text { font-family: var(--mono); font-size: 11px; color: var(--accent); line-height: 1.4; }
+    .progress-bar-bg { height: 3px; background: var(--surface2); border-radius: 2px; overflow: hidden; }
+    .progress-bar-fill { height: 100%; background: var(--accent); border-radius: 2px;
+      transition: width 0.15s; width: 0%; }
+    .dl-card-btn { display: none; align-items: center; gap: 7px;
+      background: rgba(74,222,128,.07); border: 1px solid rgba(74,222,128,.2);
+      color: var(--green); border-radius: 8px; padding: 7px 12px; font-size: 13px;
+      font-weight: 500; cursor: pointer; width: 100%; justify-content: center;
+      margin-top: 4px; transition: background 0.15s; font-family: var(--sans); }
+    .dl-card-btn.visible { display: flex; }
+    .dl-card-btn:hover { background: rgba(74,222,128,.13); }
+
+    /* Sticky bar */
+    .actions-bar { position: sticky; bottom: 0; background: rgba(13,13,13,0.9);
+      backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+      border-top: 1px solid var(--border); padding: 12px 20px; margin: 0 -20px; display: none; }
+    .actions-bar.visible { display: block; }
+    .actions-inner { max-width: 640px; margin: 0 auto; }
+    .btn-primary { width: 100%; background: var(--accent); color: #0d0d0d; border: none;
+      border-radius: 11px; padding: 14px 20px; font-size: 15px; font-weight: 600;
+      cursor: pointer; font-family: var(--sans); display: flex; align-items: center;
+      justify-content: center; gap: 8px; transition: opacity 0.15s; }
+    .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spinner { width: 16px; height: 16px; border: 2.5px solid rgba(13,13,13,0.3);
+      border-top-color: #0d0d0d; border-radius: 50%; animation: spin 0.7s linear infinite;
+      display: none; }
+    .spinner.visible { display: block; }
+    #empty-hint { text-align: center; color: var(--muted); font-size: 13px; padding: 4px 0 0; display: none; }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="header-inner">
+    <div class="header-row">
+      <div class="logo">
+        <div class="logo-mark">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
+               stroke-linecap="round" stroke-linejoin="round" style="color:#0d0d0d" width="16" height="16">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+            <polyline points="14 2 14 8 20 8"/>
+            <line x1="12" y1="18" x2="12" y2="12"/>
+            <line x1="9" y1="15" x2="15" y2="15"/>
+          </svg>
+        </div>
+        <div>
+          <h1>PDF Compressor</h1>
+          <div class="subtitle">Compress to &lt;25 MB · runs in your browser</div>
+        </div>
+      </div>
+      <button class="install-btn" onclick="document.getElementById('install-modal').classList.add('open')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round" width="12" height="12">
+          <rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12" y2="18"/>
+        </svg>
+        Add to Home
+      </button>
+    </div>
+  </div>
+</header>
+
+<!-- Install modal -->
+<div class="modal-overlay" id="install-modal"
+     onclick="if(event.target===this)this.classList.remove('open')">
+  <div class="modal-sheet">
+    <div class="modal-title">
+      Add to iPhone Home Screen
+      <button class="modal-close" onclick="document.getElementById('install-modal').classList.remove('open')">✕</button>
+    </div>
+    <div class="install-steps">
+      <div class="install-step">
+        <div class="step-num">1</div>
+        <div class="step-text">Open this page in <strong>Safari</strong> — Chrome and Firefox on iOS don't support home screen apps.</div>
+      </div>
+      <div class="install-step">
+        <div class="step-num">2</div>
+        <div class="step-text">Tap the <strong>Share button</strong> — the box-with-arrow icon at the bottom of the screen (or top-right in iPad).</div>
+      </div>
+      <div class="install-step">
+        <div class="step-num">3</div>
+        <div class="step-text">Scroll the share sheet and tap <strong>"Add to Home Screen"</strong>.</div>
+      </div>
+      <div class="install-step">
+        <div class="step-num">4</div>
+        <div class="step-text">Tap <strong>Add</strong>. The app opens full-screen from your home screen with no browser chrome, just like a native app.</div>
+      </div>
+    </div>
+    <div class="install-note">
+      ⚠ The page must be served over <strong>https://</strong> for this to work properly — host it on your Nextcloud or sajivfrancis.com. All processing runs locally in your browser; no files are uploaded anywhere.
+    </div>
+  </div>
+</div>
+
+<main>
+  <!-- Drop zone -->
+  <div class="drop-zone" id="drop-zone">
+    <input type="file" id="file-input" accept=".pdf,application/pdf" multiple>
+    <div class="drop-icon">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"
+           stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+        <polyline points="17 8 12 3 7 8"/>
+        <line x1="12" y1="3" x2="12" y2="15"/>
+      </svg>
+    </div>
+    <div class="drop-label">Tap to select PDFs</div>
+    <div class="drop-sub">Multiple files OK · <span>nothing leaves your device</span></div>
+  </div>
+
+  <!-- Results panel — shown on completion -->
+  <div id="results-panel">
+    <div class="results-title">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+           stroke-linecap="round" stroke-linejoin="round" width="15" height="15">
+        <polyline points="20 6 9 17 4 12"/>
+      </svg>
+      <span id="results-title-text">Ready to download</span>
+    </div>
+    <div class="results-stats" id="results-stats"></div>
+    <div class="dl-actions">
+      <button class="dl-zip-btn" id="dl-zip-btn" onclick="downloadZip()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
+             stroke-linecap="round" stroke-linejoin="round" width="14" height="14">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+          <polyline points="7 10 12 15 17 10"/>
+          <line x1="12" y1="15" x2="12" y2="3"/>
+        </svg>
+        Download ZIP
+      </button>
+      <button class="dl-ind-btn" onclick="downloadAllIndividual()">
+        Download individually
+      </button>
+    </div>
+  </div>
+
+  <div id="file-list"></div>
+  <div id="empty-hint">Add PDFs above to get started.</div>
+</main>
+
+<div class="actions-bar" id="actions-bar">
+  <div class="actions-inner">
+    <button class="btn-primary" id="compress-btn" onclick="startCompression()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+           stroke-linecap="round" stroke-linejoin="round" width="16" height="16">
+        <polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/>
+        <line x1="14" y1="10" x2="21" y2="3"/><line x1="3" y1="21" x2="10" y2="14"/>
+      </svg>
+      <span id="compress-label">Compress All</span>
+      <div class="spinner" id="btn-spinner"></div>
+    </button>
+  </div>
+</div>
+
+<script>
+pdfjsLib.GlobalWorkerOptions.workerSrc =
+  'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+const TARGET_BYTES    = 25 * 1024 * 1024;
+const LOAD_TIMEOUT_MS = 120_000;  // 2 min — large SAP Press books can take 60s+ to parse
+const YIELD_EVERY     = 6;
+
+const QUALITY_LADDER = [
+  { quality: 0.82, scale: 1.50, label: 'High (108 DPI)' },
+  { quality: 0.72, scale: 1.20, label: 'Medium (86 DPI)' },
+  { quality: 0.62, scale: 1.00, label: 'Standard (72 DPI)' },
+  { quality: 0.52, scale: 0.85, label: 'Low (61 DPI)' },
+  { quality: 0.42, scale: 0.72, label: 'Minimum (52 DPI)' },
+];
+
+const yield_ = () => new Promise(r => setTimeout(r, 0));
+
+// Wake Lock — keeps screen on during long batch runs
+let wakeLock = null;
+async function acquireWakeLock() {
+  if ('wakeLock' in navigator) try { wakeLock = await navigator.wakeLock.request('screen'); } catch (_) {}
+}
+async function releaseWakeLock() {
+  if (wakeLock) { try { await wakeLock.release(); } catch (_) {} wakeLock = null; }
+}
+document.addEventListener('visibilitychange', async () => {
+  if (isRunning && document.visibilityState === 'visible') await acquireWakeLock();
+});
+
+// Generate PWA icon via canvas at startup
+(function () {
+  try {
+    const c = document.createElement('canvas');
+    c.width = c.height = 180;
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = '#a78bfa';
+    if (ctx.roundRect) { ctx.roundRect(0, 0, 180, 180, 36); ctx.fill(); }
+    else { ctx.fillRect(0, 0, 180, 180); }
+    ctx.strokeStyle = '#0d0d0d'; ctx.lineWidth = 10; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(62,48); ctx.lineTo(62,132); ctx.lineTo(118,132);
+    ctx.lineTo(118,72); ctx.lineTo(93,48); ctx.closePath(); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(93,48); ctx.lineTo(93,72); ctx.lineTo(118,72); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(76,100); ctx.lineTo(104,100); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(76,114); ctx.lineTo(104,114); ctx.stroke();
+    document.getElementById('app-icon-link').href = c.toDataURL('image/png');
+  } catch (_) {}
+})();
+
+// State
+let entries = [], nextId = 0, isRunning = false;
+
+const $ = id => document.getElementById(id);
+function fmtSize(b) { return b >= 1_048_576 ? (b/1_048_576).toFixed(1)+' MB' : (b/1024).toFixed(0)+' KB'; }
+
+function setBadge(id, cls, text) {
+  const b = $(`badge-${id}`); b.className = `status-badge badge-${cls}`; b.textContent = text;
+}
+function setProgress(id, pct, text) {
+  $(`prog-wrap-${id}`).classList.add('visible');
+  $(`prog-text-${id}`).textContent = text;
+  $(`prog-fill-${id}`).style.width = pct + '%';
+}
+function hideProgress(id) { $(`prog-wrap-${id}`).classList.remove('visible'); }
+
+function renderCard(entry) {
+  const { id, file } = entry;
+  const card = document.createElement('div');
+  card.className = 'file-card'; card.id = `card-${id}`;
+  card.innerHTML = `
+    <div class="file-top">
+      <div class="file-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"
+             stroke-linecap="round" stroke-linejoin="round">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+          <polyline points="14 2 14 8 20 8"/>
+        </svg>
+      </div>
+      <div class="file-name-wrap">
+        <div class="file-name" title="${file.name}">${file.name}</div>
+        <div class="file-meta">
+          <span class="size-orig">${fmtSize(file.size)}</span>
+          <span class="arr" id="arrow-${id}" style="display:none">→</span>
+          <span class="size-final" id="final-${id}"></span>
+          <span class="status-badge badge-pending" id="badge-${id}">queued</span>
+        </div>
+      </div>
+      <button class="remove-btn" onclick="removeEntry(${id})">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round" width="14" height="14">
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+    <div class="progress-wrap" id="prog-wrap-${id}">
+      <div class="progress-text" id="prog-text-${id}"></div>
+      <div class="progress-bar-bg"><div class="progress-bar-fill" id="prog-fill-${id}"></div></div>
+    </div>
+    <button class="dl-card-btn" id="dl-card-${id}" onclick="downloadEntry(${id})">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+           stroke-linecap="round" stroke-linejoin="round" width="12" height="12">
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+        <polyline points="7 10 12 15 17 10"/>
+        <line x1="12" y1="15" x2="12" y2="3"/>
+      </svg>
+      Download
+    </button>`;
+  $('file-list').appendChild(card);
+}
+
+function addFiles(fileList) {
+  const existing = new Set(entries.map(e => e.file.name + e.file.size));
+  for (const f of fileList) {
+    if (!f.name.toLowerCase().endsWith('.pdf') && f.type !== 'application/pdf') continue;
+    if (existing.has(f.name + f.size)) continue;
+    const id = ++nextId;
+    entries.push({ id, file: f, status: 'queued', blob: null });
+    renderCard(entries.at(-1));
+    existing.add(f.name + f.size);
+  }
+  updateUI();
+}
+
+function removeEntry(id) {
+  if (isRunning) return;
+  entries = entries.filter(e => e.id !== id);
+  $(`card-${id}`)?.remove();
+  updateUI();
+}
+
+// ── THE STALL FIX: PDF.js loading with elapsed-time heartbeat + timeout ───────
+//
+// Problem: pdfjsLib.getDocument().promise hangs silently for 30-90s on large
+// SAP Press PDFs (complex font tables, lots of embedded images). The old code
+// just showed "loading PDF..." with no feedback, so it looked frozen.
+//
+// Fix 1 — Heartbeat: update the badge every second with elapsed time so the
+//          user can see it's still working ("parsing 87.3 MB… 14s").
+// Fix 2 — disableRange/disableStream: forces PDF.js to load the file as a
+//          single block rather than using HTTP range requests, which are
+//          unreliable on local Blob objects and can cause infinite hangs.
+// Fix 3 — Promise.race timeout: if PDF.js truly gets stuck (corrupted PDF,
+//          worker crash), it fails cleanly after 2 minutes with a message.
+async function loadPdfWithTimeout(data, fileSize, id) {
+  let elapsed = 0;
+  const heartbeat = setInterval(() => {
+    elapsed++;
+    setBadge(id, 'working', `parsing ${fmtSize(fileSize)}… ${elapsed}s`);
+    setProgress(id, 0, `Reading PDF structure — ${elapsed}s elapsed. Large books take up to 60s, please wait.`);
+  }, 1000);
+
+  try {
+    const loadTask = pdfjsLib.getDocument({
+      data,
+      disableRange:  true,   // load whole file at once — no range-request hangs
+      disableStream: true,   // no streaming — more reliable for Blob data
+    });
+    const timeout = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('timeout')), LOAD_TIMEOUT_MS)
+    );
+    return await Promise.race([loadTask.promise, timeout]);
+  } finally {
+    clearInterval(heartbeat);
+  }
+}
+
+async function compressSingle(entry) {
+  const { id, file } = entry;
+  setBadge(id, 'working', 'reading…');
+  setProgress(id, 0, 'Reading file from storage…');
+  $(`card-${id}`).classList.add('processing');
+
+  let arrayBuffer;
+  try { arrayBuffer = await file.arrayBuffer(); }
+  catch (e) { markError(id, entry, 'file read error'); return; }
+
+  const originalSize = arrayBuffer.byteLength;
+
+  if (originalSize <= TARGET_BYTES) {
+    entry.blob = new Blob([arrayBuffer], { type: 'application/pdf' });
+    entry.status = 'skipped';
+    arrayBuffer = null;
+    hideProgress(id);
+    setBadge(id, 'skip', 'under 25 MB — kept');
+    finishCard(id, 'done-ok');
+    $(`dl-card-${id}`).classList.add('visible');
+    return;
+  }
+
+  let pdfjsDoc;
+  try {
+    pdfjsDoc = await loadPdfWithTimeout(new Uint8Array(arrayBuffer), originalSize, id);
+  } catch (e) {
+    markError(id, entry, e.message === 'timeout' ? 'parse timeout — try desktop' : 'PDF load failed');
+    return;
+  } finally {
+    arrayBuffer = null; // free raw buffer — PDF.js holds its own copy
+  }
+
+  const numPages = pdfjsDoc.numPages;
+  let lastBytes = null, lastLabel = null;
+
+  try {
+    for (const { quality, scale, label } of QUALITY_LADDER) {
+      setBadge(id, 'working', label);
+      setProgress(id, 0, `${label} — starting (${numPages} pages)…`);
+
+      let pdfDoc;
+      try { pdfDoc = await PDFLib.PDFDocument.create(); } catch (_) { continue; }
+
+      let failed = false;
+      for (let i = 1; i <= numPages; i++) {
+        setProgress(id, Math.round(i / numPages * 100), `${label} — ${i} / ${numPages}`);
+        if (i % YIELD_EVERY === 0) await yield_();
+
+        try {
+          const page     = await pdfjsDoc.getPage(i);
+          const viewport = page.getViewport({ scale });
+          const canvas   = document.createElement('canvas');
+          canvas.width   = Math.floor(viewport.width);
+          canvas.height  = Math.floor(viewport.height);
+          await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+
+          const dataUrl = canvas.toDataURL('image/jpeg', quality);
+          const pw = canvas.width, ph = canvas.height;
+          canvas.width = 0; canvas.height = 0; // free GPU texture memory
+
+          const raw      = atob(dataUrl.split(',')[1]);
+          const imgBytes = new Uint8Array(raw.length);
+          for (let j = 0; j < raw.length; j++) imgBytes[j] = raw.charCodeAt(j);
+
+          const jpg = await pdfDoc.embedJpg(imgBytes);
+          pdfDoc.addPage([pw, ph]).drawImage(jpg, { x: 0, y: 0, width: pw, height: ph });
+        } catch (_) { failed = true; break; }
+      }
+
+      if (failed) continue;
+
+      let pdfBytes;
+      try { pdfBytes = await pdfDoc.save(); } catch (_) { continue; }
+      lastBytes = pdfBytes; lastLabel = label;
+
+      if (pdfBytes.length <= TARGET_BYTES) {
+        entry.blob   = new Blob([pdfBytes], { type: 'application/pdf' });
+        entry.status = 'compressed';
+        const pct    = Math.round((1 - pdfBytes.length / originalSize) * 100);
+        hideProgress(id);
+        $(`arrow-${id}`).style.display = '';
+        const fs = $(`final-${id}`); fs.textContent = fmtSize(pdfBytes.length); fs.classList.add('reduced');
+        setBadge(id, 'ok', `−${pct}% · ${label}`);
+        finishCard(id, 'done-ok');
+        $(`dl-card-${id}`).classList.add('visible');
+        return;
+      }
+    }
+  } finally {
+    // CRITICAL: destroy PDF.js document to release all decoded page memory.
+    // Without this, 20 files accumulate hundreds of MB and crash the tab.
+    try { pdfjsDoc.destroy(); } catch (_) {}
+    pdfjsDoc = null;
+  }
+
+  if (lastBytes) {
+    entry.blob   = new Blob([lastBytes], { type: 'application/pdf' });
+    entry.status = 'partial';
+    const pct    = Math.round((1 - lastBytes.length / originalSize) * 100);
+    hideProgress(id);
+    $(`arrow-${id}`).style.display = '';
+    $(`final-${id}`).textContent = fmtSize(lastBytes.length) + ' ⚠';
+    setBadge(id, 'warn', `still large (−${pct}%)`);
+    finishCard(id, 'done-warn');
+    $(`dl-card-${id}`).classList.add('visible');
+  } else {
+    markError(id, entry, 'compression failed');
+  }
+}
+
+function finishCard(id, cls) {
+  const c = $(`card-${id}`); c.classList.remove('processing'); c.classList.add(cls);
+}
+function markError(id, entry, msg) {
+  entry.status = 'error';
+  hideProgress(id);
+  setBadge(id, 'err', msg);
+  finishCard(id, 'done-err');
+}
+
+async function startCompression() {
+  if (isRunning || !entries.length) return;
+  isRunning = true;
+
+  const btn = $('compress-btn'), spinner = $('btn-spinner'), lbl = $('compress-label');
+  btn.disabled = true; spinner.classList.add('visible'); lbl.textContent = 'Working…';
+  $('results-panel').classList.remove('visible');
+
+  await acquireWakeLock();
+
+  for (const entry of entries.filter(e => ['queued','error','partial'].includes(e.status))) {
+    await compressSingle(entry);
+    await new Promise(r => setTimeout(r, 350)); // GC window between files
+  }
+
+  await releaseWakeLock();
+  isRunning = false;
+  btn.disabled = false; spinner.classList.remove('visible'); lbl.textContent = 'Compress All';
+
+  showResultsPanel();
+}
+
+function showResultsPanel() {
+  const done       = entries.filter(e => e.blob != null);
+  if (!done.length) return;
+
+  const compressed = done.filter(e => e.status === 'compressed');
+  const skipped    = done.filter(e => e.status === 'skipped');
+  const partial    = done.filter(e => e.status === 'partial');
+  const saved      = compressed.reduce((a, e) => a + (e.file.size - e.blob.size), 0);
+
+  const parts = [];
+  if (compressed.length) parts.push(`<span>${compressed.length}</span> compressed`);
+  if (skipped.length)    parts.push(`<span>${skipped.length}</span> already OK`);
+  if (partial.length)    parts.push(`<span>${partial.length}</span> still large`);
+  if (saved > 0)         parts.push(`<span>${fmtSize(saved)}</span> saved`);
+
+  $('results-title-text').textContent = `${done.length} file${done.length > 1 ? 's' : ''} ready`;
+  $('results-stats').innerHTML = parts.join(' · ');
+  $('dl-zip-btn').style.display = done.length === 1 ? 'none' : '';
+  $('results-panel').classList.add('visible');
+  $('results-panel').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function downloadEntry(id) {
+  const e = entries.find(e => e.id === id);
+  if (!e?.blob) return;
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(e.blob);
+  a.download = e.file.name.replace(/\.pdf$/i, '') + '_compressed.pdf';
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 15000);
+}
+
+// Staggered individual downloads — iOS blocks simultaneous download triggers
+async function downloadAllIndividual() {
+  const done = entries.filter(e => e.blob);
+  for (let i = 0; i < done.length; i++) {
+    downloadEntry(done[i].id);
+    if (i < done.length - 1) await new Promise(r => setTimeout(r, 700));
+  }
+}
+
+async function downloadZip() {
+  const done = entries.filter(e => e.blob);
+  if (!done.length) return;
+  if (done.length === 1) { downloadEntry(done[0].id); return; }
+
+  const btn = $('dl-zip-btn'), orig = btn.innerHTML;
+  btn.textContent = 'Building ZIP…'; btn.disabled = true;
+  try {
+    const zip = new JSZip();
+    for (const e of done)
+      zip.file(e.file.name.replace(/\.pdf$/i, '') + '_compressed.pdf', e.blob);
+    const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 1 } });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'sap_books_compressed.zip';
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 20000);
+  } finally { btn.innerHTML = orig; btn.disabled = false; }
+}
+
+function updateUI() {
+  const hasFiles = entries.length > 0;
+  $('actions-bar').classList.toggle('visible', hasFiles);
+  $('empty-hint').style.display = hasFiles ? 'none' : '';
+  if (!hasFiles) $('results-panel').classList.remove('visible');
+  const q = entries.filter(e => e.status === 'queued').length;
+  $('compress-label').textContent = q > 0 ? `Compress ${q} File${q > 1 ? 's' : ''}` : 'Compress All';
+}
+
+$('file-input').addEventListener('change', function () { addFiles(this.files); this.value = ''; });
+const dz = $('drop-zone');
+dz.addEventListener('dragover',  e => { e.preventDefault(); dz.classList.add('drag-over'); });
+dz.addEventListener('dragleave', () => dz.classList.remove('drag-over'));
+dz.addEventListener('drop', e => { e.preventDefault(); dz.classList.remove('drag-over'); addFiles(e.dataTransfer.files); });
+</script>
+</body>
+</html>
