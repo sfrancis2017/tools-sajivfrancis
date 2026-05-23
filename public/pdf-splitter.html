@@ -6,13 +6,26 @@
   <title>PDF Splitter</title>
   <script>
     (function () {
+      function applyTheme(theme) {
+        document.documentElement.setAttribute('data-theme', theme);
+      }
       var m = document.cookie.match(/(?:^|;\s*)theme=(light|dark)/);
       var cookieTheme = m ? m[1] : null;
       var localTheme = null;
       try { localTheme = localStorage.getItem('theme'); } catch (_) {}
       var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
       var theme = cookieTheme || localTheme || (prefersDark ? 'dark' : 'light');
-      document.documentElement.setAttribute('data-theme', theme);
+      applyTheme(theme);
+      window.__setSiteTheme = function (next) {
+        applyTheme(next);
+        try { localStorage.setItem('theme', next); } catch (_) {}
+        document.cookie = 'theme=' + next + '; Domain=.sajivfrancis.com; Path=/; Max-Age=31536000; SameSite=Lax; Secure';
+      };
+      window.__toggleSiteTheme = function () {
+        var next = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+        window.__setSiteTheme(next);
+        return next;
+      };
     })();
   </script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
@@ -100,6 +113,20 @@
     }
 
     .back-link:hover {
+      color: var(--text);
+      border-color: var(--accent);
+    }
+    .theme-btn {
+      color: var(--muted);
+      text-decoration: none;
+      font-size: 12px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      border-radius: 8px;
+      padding: 6px 9px;
+      cursor: pointer;
+    }
+    .theme-btn:hover {
       color: var(--text);
       border-color: var(--accent);
     }
@@ -293,7 +320,10 @@
           <h1>PDF Splitter</h1>
           <div class="subtitle">Split one PDF into multiple smaller PDFs on-device</div>
         </div>
-        <a class="back-link" href="/">All tools</a>
+        <div style="display:flex; align-items:center; gap:8px; flex-wrap: wrap; justify-content: flex-end;">
+          <button class="theme-btn" id="theme-toggle" type="button">Toggle theme</button>
+          <a class="back-link" href="/">All tools</a>
+        </div>
       </div>
       <nav class="global-nav" aria-label="Global">
         <a href="https://sajivfrancis.com/">Home</a>
@@ -500,6 +530,10 @@
     $('download-all').addEventListener('click', async () => {
       if (!splitOutputs.length) return;
       await downloadIndividually(splitOutputs);
+    });
+
+    $('theme-toggle').addEventListener('click', () => {
+      window.__toggleSiteTheme();
     });
   </script>
 </body>

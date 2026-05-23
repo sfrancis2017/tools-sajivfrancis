@@ -18,13 +18,26 @@
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
   <script>
     (function () {
+      function applyTheme(theme) {
+        document.documentElement.setAttribute('data-theme', theme);
+      }
       var m = document.cookie.match(/(?:^|;\s*)theme=(light|dark)/);
       var cookieTheme = m ? m[1] : null;
       var localTheme = null;
       try { localTheme = localStorage.getItem('theme'); } catch (_) {}
       var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
       var theme = cookieTheme || localTheme || (prefersDark ? 'dark' : 'light');
-      document.documentElement.setAttribute('data-theme', theme);
+      applyTheme(theme);
+      window.__setSiteTheme = function (next) {
+        applyTheme(next);
+        try { localStorage.setItem('theme', next); } catch (_) {}
+        document.cookie = 'theme=' + next + '; Domain=.sajivfrancis.com; Path=/; Max-Age=31536000; SameSite=Lax; Secure';
+      };
+      window.__toggleSiteTheme = function () {
+        var next = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+        window.__setSiteTheme(next);
+        return next;
+      };
     })();
   </script>
 
@@ -75,6 +88,19 @@
       transition: color 0.15s, border-color 0.15s;
     }
     .home-link:hover { color: var(--text); border-color: var(--muted); }
+    .theme-btn {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--muted);
+      border-radius: 8px;
+      padding: 6px 11px;
+      font-size: 12px;
+      font-family: var(--sans);
+      cursor: pointer;
+      white-space: nowrap;
+      transition: color 0.15s, border-color 0.15s;
+    }
+    .theme-btn:hover { color: var(--text); border-color: var(--muted); }
     .global-nav {
       display: flex;
       flex-wrap: wrap;
@@ -292,8 +318,9 @@
           <div class="subtitle">Compress and split PDFs locally in your browser</div>
         </div>
       </div>
-      <div style="display:flex; align-items:center; gap:8px;">
+      <div style="display:flex; align-items:center; gap:8px; flex-wrap: wrap; justify-content: flex-end;">
         <a class="home-link" href="https://sajivfrancis.com" target="_blank" rel="noopener noreferrer">Main site</a>
+        <button class="theme-btn" id="theme-toggle" type="button">Toggle theme</button>
         <button class="install-btn" onclick="document.getElementById('install-modal').classList.add('open')">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                stroke-linecap="round" stroke-linejoin="round" width="12" height="12">
@@ -970,6 +997,9 @@ const dz = $('drop-zone');
 dz.addEventListener('dragover',  e => { e.preventDefault(); dz.classList.add('drag-over'); });
 dz.addEventListener('dragleave', () => dz.classList.remove('drag-over'));
 dz.addEventListener('drop', e => { e.preventDefault(); dz.classList.remove('drag-over'); addFiles(e.dataTransfer.files); });
+document.getElementById('theme-toggle').addEventListener('click', function () {
+  window.__toggleSiteTheme();
+});
 </script>
 </body>
 </html>
