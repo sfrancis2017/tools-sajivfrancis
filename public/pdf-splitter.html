@@ -310,6 +310,71 @@
     @media (max-width: 640px) {
       .grid { grid-template-columns: 1fr; }
     }
+
+    .chat-launcher {
+      position: fixed;
+      right: 16px;
+      bottom: 16px;
+      z-index: 40;
+      border: 1px solid var(--border);
+      background: var(--accent);
+      color: #0d0d0d;
+      border-radius: 999px;
+      padding: 10px 14px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      box-shadow: 0 10px 24px rgba(0, 0, 0, 0.25);
+    }
+    .chat-modal {
+      position: fixed;
+      inset: 0;
+      z-index: 60;
+      display: none;
+      align-items: flex-end;
+      justify-content: flex-end;
+      padding: 14px;
+    }
+    .chat-modal.open { display: flex; }
+    .chat-backdrop { position: absolute; inset: 0; background: rgba(0, 0, 0, 0.45); }
+    .chat-panel {
+      position: relative;
+      width: min(420px, calc(100vw - 20px));
+      height: min(700px, calc(100vh - 20px));
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+    .chat-panel.expanded {
+      width: calc(100vw - 20px);
+      height: calc(100vh - 20px);
+    }
+    .chat-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 8px 10px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface2, var(--surface));
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .chat-head-actions { display: flex; gap: 6px; }
+    .chat-head-actions button {
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--muted);
+      border-radius: 6px;
+      font-size: 11px;
+      padding: 4px 7px;
+      cursor: pointer;
+    }
+    .chat-head-actions button:hover { color: var(--text); border-color: var(--accent); }
+    .chat-frame { width: 100%; height: 100%; border: 0; background: #fff; flex: 1; }
   </style>
 </head>
 <body>
@@ -377,6 +442,21 @@
         <button class="btn" id="download-all">Download individually</button>
       </div>
     </div>
+  </div>
+
+  <button class="chat-launcher" id="chat-launcher" type="button">Chat</button>
+  <div class="chat-modal" id="chat-modal" aria-hidden="true">
+    <div class="chat-backdrop" id="chat-backdrop"></div>
+    <section class="chat-panel" id="chat-panel" role="dialog" aria-label="Chat">
+      <div class="chat-head">
+        <span>chat.sajivfrancis.com</span>
+        <div class="chat-head-actions">
+          <button id="chat-expand" type="button">Expand</button>
+          <button id="chat-close" type="button">Close</button>
+        </div>
+      </div>
+      <iframe class="chat-frame" id="chat-frame" src="https://chat.sajivfrancis.com/?mode=public" loading="lazy" allow="clipboard-write"></iframe>
+    </section>
   </div>
 
   <script>
@@ -535,6 +615,40 @@
     $('theme-toggle').addEventListener('click', () => {
       window.__toggleSiteTheme();
     });
+
+    (function () {
+      var launcher = $('chat-launcher');
+      var modal = $('chat-modal');
+      var backdrop = $('chat-backdrop');
+      var closeBtn = $('chat-close');
+      var expandBtn = $('chat-expand');
+      var panel = $('chat-panel');
+
+      function openChat() {
+        modal.classList.add('open');
+        modal.setAttribute('aria-hidden', 'false');
+      }
+
+      function closeChat() {
+        modal.classList.remove('open');
+        modal.setAttribute('aria-hidden', 'true');
+        panel.classList.remove('expanded');
+        expandBtn.textContent = 'Expand';
+      }
+
+      function toggleExpand() {
+        panel.classList.toggle('expanded');
+        expandBtn.textContent = panel.classList.contains('expanded') ? 'Window' : 'Expand';
+      }
+
+      launcher.addEventListener('click', openChat);
+      closeBtn.addEventListener('click', closeChat);
+      backdrop.addEventListener('click', closeChat);
+      expandBtn.addEventListener('click', toggleExpand);
+      document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && modal.classList.contains('open')) closeChat();
+      });
+    })();
   </script>
 </body>
 </html>
