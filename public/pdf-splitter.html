@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PDF Splitter</title>
+  <script>
+    (function () {
+      var m = document.cookie.match(/(?:^|;\s*)theme=(light|dark)/);
+      var cookieTheme = m ? m[1] : null;
+      var localTheme = null;
+      try { localTheme = localStorage.getItem('theme'); } catch (_) {}
+      var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+      var theme = cookieTheme || localTheme || (prefersDark ? 'dark' : 'light');
+      document.documentElement.setAttribute('data-theme', theme);
+    })();
+  </script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #0d0d0d;
+      --surface: #161616;
+      --surface2: #1f1f1f;
+      --border: #2c2c2c;
+      --text: #e2e2e2;
+      --muted: #6b6b6b;
+      --accent: #a78bfa;
+      --green: #4ade80;
+      --green-dim: #14532d;
+      --sans: 'IBM Plex Sans', sans-serif;
+      --mono: 'IBM Plex Mono', monospace;
+    }
+    html[data-theme="light"] {
+      --bg: #f7f7f7;
+      --surface: #ffffff;
+      --surface2: #f2f2f2;
+      --border: #e4e4e4;
+      --text: #111111;
+      --muted: #707070;
+      --accent: #7c3aed;
+      --green: #166534;
+      --green-dim: #d1fae5;
+    }
+
+    html, body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--sans);
+      -webkit-font-smoothing: antialiased;
+      min-height: 100%;
+    }
+
+    body {
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+      padding: 18px 20px 20px;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 700px;
+      margin: 0 auto;
+    }
+
+    header {
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 12px;
+      margin-bottom: 14px;
+    }
+
+    .header-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .title-wrap h1 {
+      font-size: 18px;
+      font-weight: 600;
+      margin-bottom: 3px;
+    }
+
+    .subtitle {
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .back-link {
+      color: var(--muted);
+      text-decoration: none;
+      font-size: 12px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 6px 9px;
+    }
+
+    .back-link:hover {
+      color: var(--text);
+      border-color: var(--accent);
+    }
+
+    .drop-zone {
+      border: 2px dashed var(--border);
+      border-radius: 12px;
+      padding: 22px;
+      text-align: center;
+      position: relative;
+      margin-bottom: 12px;
+      transition: border-color 0.15s, background 0.15s;
+      cursor: pointer;
+    }
+
+    .drop-zone.drag {
+      border-color: var(--accent);
+      background: rgba(167, 139, 250, 0.08);
+    }
+
+    .drop-zone input {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      opacity: 0;
+      cursor: pointer;
+    }
+
+    .drop-label {
+      font-size: 14px;
+      font-weight: 500;
+      margin-bottom: 3px;
+    }
+
+    .drop-sub {
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .settings {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px;
+      margin-bottom: 12px;
+    }
+
+    .settings h2 {
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--muted);
+      margin-bottom: 10px;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+
+    .field span {
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .field input,
+    .field select {
+      width: 100%;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--text);
+      border-radius: 8px;
+      padding: 8px 10px;
+      font-size: 13px;
+      font-family: var(--sans);
+    }
+
+    .help {
+      margin-top: 8px;
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.45;
+    }
+
+    .summary {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 12px;
+      margin-bottom: 12px;
+      display: none;
+    }
+
+    .summary.visible {
+      display: block;
+    }
+
+    .summary-title {
+      color: var(--green);
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 7px;
+    }
+
+    .summary-meta {
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.5;
+      margin-bottom: 10px;
+    }
+
+    .summary-actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .btn {
+      border: 1px solid var(--border);
+      background: var(--surface2);
+      color: var(--text);
+      border-radius: 8px;
+      padding: 9px 12px;
+      font-size: 13px;
+      font-family: var(--sans);
+      cursor: pointer;
+    }
+
+    .btn:hover { border-color: var(--accent); }
+
+    .btn-primary {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #0d0d0d;
+      font-weight: 600;
+    }
+
+    .btn-primary:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .status {
+      min-height: 20px;
+      font-size: 12px;
+      color: var(--muted);
+      margin-bottom: 8px;
+    }
+
+    @media (max-width: 640px) {
+      .grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div class="header-top">
+        <div class="title-wrap">
+          <h1>PDF Splitter</h1>
+          <div class="subtitle">Split one PDF into multiple smaller PDFs on-device</div>
+        </div>
+        <a class="back-link" href="/">All tools</a>
+      </div>
+    </header>
+
+    <div class="drop-zone" id="drop-zone">
+      <input type="file" id="file-input" accept=".pdf,application/pdf" />
+      <div class="drop-label">Select a PDF</div>
+      <div class="drop-sub">No upload. Processing runs locally in your browser.</div>
+    </div>
+
+    <div class="settings">
+      <h2>Split settings</h2>
+      <div class="grid">
+        <label class="field">
+          <span>Mode</span>
+          <select id="split-mode">
+            <option value="fixed" selected>Fixed pages per file</option>
+            <option value="ranges">Custom page ranges</option>
+          </select>
+        </label>
+        <label class="field" id="pages-per-part-field">
+          <span>Pages per output file</span>
+          <input type="number" id="pages-per-part" min="1" max="2000" value="25" />
+        </label>
+      </div>
+      <label class="field" id="ranges-field" style="margin-top:10px; display:none;">
+        <span>Ranges (e.g. 1-10,11-25,26-40)</span>
+        <input type="text" id="ranges-input" placeholder="1-10,11-25" />
+      </label>
+      <p class="help" id="settings-help">Each output keeps original PDF quality; this tool does not recompress.</p>
+    </div>
+
+    <div class="status" id="status">Select a PDF to begin.</div>
+
+    <button class="btn btn-primary" id="split-btn" disabled>Split PDF</button>
+
+    <div class="summary" id="summary">
+      <div class="summary-title" id="summary-title">Ready</div>
+      <div class="summary-meta" id="summary-meta"></div>
+      <div class="summary-actions">
+        <button class="btn btn-primary" id="download-zip">Download ZIP</button>
+        <button class="btn" id="download-all">Download individually</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+
+    let selectedFile = null;
+    let splitOutputs = [];
+
+    function parseRanges(raw, maxPages) {
+      const chunks = raw.split(',').map((part) => part.trim()).filter(Boolean);
+      if (!chunks.length) throw new Error('No ranges provided.');
+      const ranges = [];
+
+      for (const chunk of chunks) {
+        const match = chunk.match(/^(\d+)(?:-(\d+))?$/);
+        if (!match) throw new Error(`Invalid range: ${chunk}`);
+
+        const start = Number(match[1]);
+        const end = Number(match[2] || match[1]);
+
+        if (start < 1 || end < 1 || start > end) throw new Error(`Invalid range: ${chunk}`);
+        if (end > maxPages) throw new Error(`Range ${chunk} exceeds page count (${maxPages}).`);
+
+        ranges.push({ start: start - 1, end: end - 1 });
+      }
+
+      return ranges;
+    }
+
+    async function buildPart(srcDoc, startIdx, endIdx, partName) {
+      const outDoc = await PDFLib.PDFDocument.create();
+      const indices = [];
+      for (let i = startIdx; i <= endIdx; i++) indices.push(i);
+      const pages = await outDoc.copyPages(srcDoc, indices);
+      for (const page of pages) outDoc.addPage(page);
+      const bytes = await outDoc.save();
+      return { name: partName, blob: new Blob([bytes], { type: 'application/pdf' }), pageCount: indices.length };
+    }
+
+    async function splitPdf(file) {
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      const srcDoc = await PDFLib.PDFDocument.load(bytes);
+      const totalPages = srcDoc.getPageCount();
+      const mode = $('split-mode').value;
+      const base = file.name.replace(/\.pdf$/i, '');
+      const parts = [];
+
+      if (mode === 'fixed') {
+        const pagesPerPart = Math.max(1, Number($('pages-per-part').value) || 25);
+        let start = 0;
+        let idx = 1;
+        while (start < totalPages) {
+          const end = Math.min(totalPages - 1, start + pagesPerPart - 1);
+          parts.push(await buildPart(srcDoc, start, end, `${base}_part-${String(idx).padStart(2, '0')}.pdf`));
+          start = end + 1;
+          idx += 1;
+        }
+      } else {
+        const ranges = parseRanges($('ranges-input').value, totalPages);
+        let idx = 1;
+        for (const range of ranges) {
+          parts.push(await buildPart(srcDoc, range.start, range.end, `${base}_range-${String(idx).padStart(2, '0')}.pdf`));
+          idx += 1;
+        }
+      }
+
+      return { totalPages, parts };
+    }
+
+    async function downloadIndividually(items) {
+      for (let i = 0; i < items.length; i++) {
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(items[i].blob);
+        link.download = items[i].name;
+        link.click();
+        setTimeout(() => URL.revokeObjectURL(link.href), 15000);
+        if (i < items.length - 1) await new Promise((resolve) => setTimeout(resolve, 700));
+      }
+    }
+
+    async function downloadZip(items) {
+      const zip = new JSZip();
+      for (const item of items) zip.file(item.name, item.blob);
+      const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 1 } });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = 'pdf_split_outputs.zip';
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(link.href), 20000);
+    }
+
+    $('split-mode').addEventListener('change', () => {
+      const mode = $('split-mode').value;
+      $('pages-per-part-field').style.display = mode === 'fixed' ? '' : 'none';
+      $('ranges-field').style.display = mode === 'ranges' ? '' : 'none';
+    });
+
+    $('file-input').addEventListener('change', () => {
+      const file = $('file-input').files?.[0];
+      if (!file) return;
+      if (!file.name.toLowerCase().endsWith('.pdf') && file.type !== 'application/pdf') {
+        $('status').textContent = 'Please select a valid PDF file.';
+        return;
+      }
+      selectedFile = file;
+      splitOutputs = [];
+      $('split-btn').disabled = false;
+      $('summary').classList.remove('visible');
+      $('status').textContent = `Selected: ${file.name}`;
+    });
+
+    const dropZone = $('drop-zone');
+    dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('drag'); });
+    dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag'));
+    dropZone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropZone.classList.remove('drag');
+      if (!e.dataTransfer?.files?.length) return;
+      $('file-input').files = e.dataTransfer.files;
+      $('file-input').dispatchEvent(new Event('change'));
+    });
+
+    $('split-btn').addEventListener('click', async () => {
+      if (!selectedFile) return;
+      $('split-btn').disabled = true;
+      $('status').textContent = 'Splitting PDF…';
+
+      try {
+        const result = await splitPdf(selectedFile);
+        splitOutputs = result.parts;
+
+        const totalSize = splitOutputs.reduce((acc, item) => acc + item.blob.size, 0);
+        const totalPartPages = splitOutputs.reduce((acc, item) => acc + item.pageCount, 0);
+
+        $('summary-title').textContent = `${splitOutputs.length} files ready`;
+        $('summary-meta').textContent = `${result.totalPages} pages in source · ${totalPartPages} pages exported · ${(totalSize / 1024 / 1024).toFixed(1)} MB total`;
+        $('summary').classList.add('visible');
+        $('status').textContent = 'Done. Download ZIP or individual files.';
+      } catch (error) {
+        $('status').textContent = `Error: ${error.message || 'Failed to split PDF.'}`;
+      } finally {
+        $('split-btn').disabled = false;
+      }
+    });
+
+    $('download-zip').addEventListener('click', async () => {
+      if (!splitOutputs.length) return;
+      await downloadZip(splitOutputs);
+    });
+
+    $('download-all').addEventListener('click', async () => {
+      if (!splitOutputs.length) return;
+      await downloadIndividually(splitOutputs);
+    });
+  </script>
+</body>
+</html>

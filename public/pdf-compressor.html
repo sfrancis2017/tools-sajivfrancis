@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>PDF Compressor</title>
+  <title>PDF Toolkit — Compress & Split</title>
 
   <!-- ── PWA / Add to Home Screen ── -->
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -16,6 +16,17 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+  <script>
+    (function () {
+      var m = document.cookie.match(/(?:^|;\s*)theme=(light|dark)/);
+      var cookieTheme = m ? m[1] : null;
+      var localTheme = null;
+      try { localTheme = localStorage.getItem('theme'); } catch (_) {}
+      var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+      var theme = cookieTheme || localTheme || (prefersDark ? 'dark' : 'light');
+      document.documentElement.setAttribute('data-theme', theme);
+    })();
+  </script>
 
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -25,6 +36,12 @@
       --amber: #fbbf24; --amber-dim: #78350f; --red: #f87171; --red-dim: #7f1d1d;
       --blue: #60a5fa; --accent: #a78bfa;
       --mono: 'IBM Plex Mono', monospace; --sans: 'IBM Plex Sans', sans-serif;
+    }
+    html[data-theme="light"] {
+      --bg: #f7f7f7; --surface: #ffffff; --surface2: #f2f2f2; --border: #e4e4e4;
+      --text: #111111; --muted: #707070; --green: #166534; --green-dim: #d1fae5;
+      --amber: #b45309; --amber-dim: #fef3c7; --red: #b91c1c; --red-dim: #fee2e2;
+      --blue: #1d4ed8; --accent: #7c3aed;
     }
     html, body { background: var(--bg); color: var(--text); font-family: var(--sans);
       font-size: 15px; -webkit-font-smoothing: antialiased; }
@@ -45,6 +62,19 @@
       cursor: pointer; white-space: nowrap; display: flex; align-items: center; gap: 5px;
       transition: color 0.15s, border-color 0.15s; flex-shrink: 0; }
     .install-btn:hover { color: var(--text); border-color: var(--muted); }
+    .home-link {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--muted);
+      border-radius: 8px;
+      padding: 6px 11px;
+      font-size: 12px;
+      font-family: var(--sans);
+      text-decoration: none;
+      white-space: nowrap;
+      transition: color 0.15s, border-color 0.15s;
+    }
+    .home-link:hover { color: var(--text); border-color: var(--muted); }
 
     /* Modal */
     .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.75);
@@ -85,6 +115,54 @@
     .drop-label { font-size: 15px; font-weight: 500; margin-bottom: 4px; }
     .drop-sub { font-size: 13px; color: var(--muted); }
     .drop-sub span { font-family: var(--mono); color: var(--accent); }
+
+    /* Settings */
+    .settings-panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px;
+      margin-bottom: 14px;
+    }
+    .settings-title {
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--muted);
+      margin-bottom: 10px;
+      font-weight: 600;
+    }
+    .settings-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+    .setting-field {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+    .setting-field span {
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .setting-field input,
+    .setting-field select {
+      width: 100%;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--text);
+      border-radius: 8px;
+      padding: 8px 10px;
+      font-family: var(--sans);
+      font-size: 13px;
+    }
+    .settings-help {
+      margin-top: 10px;
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.45;
+    }
 
     /* Results panel */
     #results-panel { display: none; background: var(--surface); border: 1px solid var(--green-dim);
@@ -166,6 +244,10 @@
       display: none; }
     .spinner.visible { display: block; }
     #empty-hint { text-align: center; color: var(--muted); font-size: 13px; padding: 4px 0 0; display: none; }
+
+    @media (max-width: 640px) {
+      .settings-grid { grid-template-columns: 1fr; }
+    }
   </style>
 </head>
 <body>
@@ -184,17 +266,20 @@
           </svg>
         </div>
         <div>
-          <h1>PDF Compressor</h1>
-          <div class="subtitle">Compress to &lt;25 MB · runs in your browser</div>
+          <h1>PDF Toolkit</h1>
+          <div class="subtitle">Compress and split PDFs locally in your browser</div>
         </div>
       </div>
-      <button class="install-btn" onclick="document.getElementById('install-modal').classList.add('open')">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-             stroke-linecap="round" stroke-linejoin="round" width="12" height="12">
-          <rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12" y2="18"/>
-        </svg>
-        Add to Home
-      </button>
+      <div style="display:flex; align-items:center; gap:8px;">
+        <a class="home-link" href="https://sajivfrancis.com" target="_blank" rel="noopener noreferrer">Main site</a>
+        <button class="install-btn" onclick="document.getElementById('install-modal').classList.add('open')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+               stroke-linecap="round" stroke-linejoin="round" width="12" height="12">
+            <rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12" y2="18"/>
+          </svg>
+          Add to Home
+        </button>
+      </div>
     </div>
   </div>
 </header>
@@ -246,6 +331,36 @@
     <div class="drop-label">Tap to select PDFs</div>
     <div class="drop-sub">Multiple files OK · <span>nothing leaves your device</span></div>
   </div>
+
+  <section class="settings-panel" id="settings-panel">
+    <div class="settings-title">Compression settings</div>
+    <div class="settings-grid">
+      <label class="setting-field">
+        <span>Target size (MB)</span>
+        <input type="number" id="target-size-mb" min="1" max="200" step="1" value="25" />
+      </label>
+      <label class="setting-field">
+        <span>Quality profile</span>
+        <select id="quality-profile">
+          <option value="fidelity" selected>High fidelity</option>
+          <option value="balanced">Balanced</option>
+          <option value="aggressive">Aggressive</option>
+        </select>
+      </label>
+      <label class="setting-field">
+        <span>If still too large</span>
+        <select id="oversize-action">
+          <option value="keep-smallest" selected>Keep smallest version</option>
+          <option value="split-parts">Split into multiple PDFs</option>
+        </select>
+      </label>
+      <label class="setting-field">
+        <span>Split part max (MB)</span>
+        <input type="number" id="split-size-mb" min="1" max="200" step="1" value="15" />
+      </label>
+    </div>
+    <p class="settings-help">Tip: use High fidelity first. If a file still cannot reach your target, select Split into multiple PDFs.</p>
+  </section>
 
   <!-- Results panel — shown on completion -->
   <div id="results-panel">
@@ -299,13 +414,31 @@ const TARGET_BYTES    = 25 * 1024 * 1024;
 const LOAD_TIMEOUT_MS = 120_000;  // 2 min — large SAP Press books can take 60s+ to parse
 const YIELD_EVERY     = 6;
 
-const QUALITY_LADDER = [
-  { quality: 0.82, scale: 1.50, label: 'High (108 DPI)' },
-  { quality: 0.72, scale: 1.20, label: 'Medium (86 DPI)' },
-  { quality: 0.62, scale: 1.00, label: 'Standard (72 DPI)' },
-  { quality: 0.52, scale: 0.85, label: 'Low (61 DPI)' },
-  { quality: 0.42, scale: 0.72, label: 'Minimum (52 DPI)' },
-];
+const QUALITY_PROFILES = {
+  fidelity: [
+    { quality: 0.90, scale: 1.70, label: 'Very High (122 DPI)' },
+    { quality: 0.84, scale: 1.45, label: 'High (104 DPI)' },
+    { quality: 0.76, scale: 1.20, label: 'Medium (86 DPI)' },
+    { quality: 0.68, scale: 1.00, label: 'Standard (72 DPI)' },
+  ],
+  balanced: [
+    { quality: 0.82, scale: 1.40, label: 'High (101 DPI)' },
+    { quality: 0.72, scale: 1.15, label: 'Medium (83 DPI)' },
+    { quality: 0.62, scale: 0.95, label: 'Standard (68 DPI)' },
+    { quality: 0.52, scale: 0.80, label: 'Low (58 DPI)' },
+  ],
+  aggressive: [
+    { quality: 0.72, scale: 1.10, label: 'Medium (79 DPI)' },
+    { quality: 0.62, scale: 0.92, label: 'Standard (66 DPI)' },
+    { quality: 0.52, scale: 0.78, label: 'Low (56 DPI)' },
+    { quality: 0.42, scale: 0.66, label: 'Minimum (48 DPI)' },
+  ],
+};
+
+let targetBytes = TARGET_BYTES;
+let splitTargetBytes = 15 * 1024 * 1024;
+let qualityProfile = 'fidelity';
+let oversizeAction = 'keep-smallest';
 
 const yield_ = () => new Promise(r => setTimeout(r, 0));
 
@@ -345,6 +478,23 @@ let entries = [], nextId = 0, isRunning = false;
 
 const $ = id => document.getElementById(id);
 function fmtSize(b) { return b >= 1_048_576 ? (b/1_048_576).toFixed(1)+' MB' : (b/1024).toFixed(0)+' KB'; }
+
+function getQualityLadder() {
+  return QUALITY_PROFILES[qualityProfile] || QUALITY_PROFILES.fidelity;
+}
+
+function outputSize(entry) {
+  return (entry.outputs || []).reduce((acc, out) => acc + out.blob.size, 0);
+}
+
+function applySettings() {
+  const targetMb = Number($('target-size-mb').value) || 25;
+  const splitMb = Number($('split-size-mb').value) || Math.max(5, targetMb - 5);
+  targetBytes = Math.max(1, Math.min(200, targetMb)) * 1024 * 1024;
+  splitTargetBytes = Math.max(1, Math.min(200, splitMb)) * 1024 * 1024;
+  qualityProfile = $('quality-profile').value || 'fidelity';
+  oversizeAction = $('oversize-action').value || 'keep-smallest';
+}
 
 function setBadge(id, cls, text) {
   const b = $(`badge-${id}`); b.className = `status-badge badge-${cls}`; b.textContent = text;
@@ -407,7 +557,7 @@ function addFiles(fileList) {
     if (!f.name.toLowerCase().endsWith('.pdf') && f.type !== 'application/pdf') continue;
     if (existing.has(f.name + f.size)) continue;
     const id = ++nextId;
-    entries.push({ id, file: f, status: 'queued', blob: null });
+    entries.push({ id, file: f, status: 'queued', outputs: [] });
     renderCard(entries.at(-1));
     existing.add(f.name + f.size);
   }
@@ -457,8 +607,60 @@ async function loadPdfWithTimeout(data, fileSize, id) {
   }
 }
 
+function setSingleOutput(entry, suffix, blob) {
+  const base = entry.file.name.replace(/\.pdf$/i, '');
+  entry.outputs = [{ name: `${base}${suffix}.pdf`, blob }];
+}
+
+async function splitBlobIntoParts(pdfBlob, baseName, maxPartBytes) {
+  const srcBytes = new Uint8Array(await pdfBlob.arrayBuffer());
+  const srcDoc = await PDFLib.PDFDocument.load(srcBytes);
+  const pageCount = srcDoc.getPageCount();
+  const outputs = [];
+
+  let start = 0;
+  while (start < pageCount) {
+    let end = start;
+    let bestBytes = null;
+
+    while (end < pageCount) {
+      const candidate = await PDFLib.PDFDocument.create();
+      const indices = [];
+      for (let idx = start; idx <= end; idx++) indices.push(idx);
+      const pages = await candidate.copyPages(srcDoc, indices);
+      for (const p of pages) candidate.addPage(p);
+
+      const bytes = await candidate.save();
+
+      if (bytes.length <= maxPartBytes) {
+        bestBytes = bytes;
+        end++;
+        continue;
+      }
+
+      if (end === start) {
+        bestBytes = bytes;
+        end++;
+      }
+      break;
+    }
+
+    if (!bestBytes) break;
+
+    const partNum = outputs.length + 1;
+    outputs.push({
+      name: `${baseName}_part-${String(partNum).padStart(2, '0')}.pdf`,
+      blob: new Blob([bestBytes], { type: 'application/pdf' }),
+    });
+    start = end;
+  }
+
+  return outputs;
+}
+
 async function compressSingle(entry) {
   const { id, file } = entry;
+  entry.outputs = [];
   setBadge(id, 'working', 'reading…');
   setProgress(id, 0, 'Reading file from storage…');
   $(`card-${id}`).classList.add('processing');
@@ -469,12 +671,12 @@ async function compressSingle(entry) {
 
   const originalSize = arrayBuffer.byteLength;
 
-  if (originalSize <= TARGET_BYTES) {
-    entry.blob = new Blob([arrayBuffer], { type: 'application/pdf' });
+  if (originalSize <= targetBytes) {
+    setSingleOutput(entry, '_kept', new Blob([arrayBuffer], { type: 'application/pdf' }));
     entry.status = 'skipped';
     arrayBuffer = null;
     hideProgress(id);
-    setBadge(id, 'skip', 'under 25 MB — kept');
+    setBadge(id, 'skip', `under ${Math.round(targetBytes / 1024 / 1024)} MB — kept`);
     finishCard(id, 'done-ok');
     $(`dl-card-${id}`).classList.add('visible');
     return;
@@ -491,10 +693,11 @@ async function compressSingle(entry) {
   }
 
   const numPages = pdfjsDoc.numPages;
-  let lastBytes = null, lastLabel = null;
+  let lastBytes = null;
+  let lastLabel = null;
 
   try {
-    for (const { quality, scale, label } of QUALITY_LADDER) {
+    for (const { quality, scale, label } of getQualityLadder()) {
       setBadge(id, 'working', label);
       setProgress(id, 0, `${label} — starting (${numPages} pages)…`);
 
@@ -533,8 +736,8 @@ async function compressSingle(entry) {
       try { pdfBytes = await pdfDoc.save(); } catch (_) { continue; }
       lastBytes = pdfBytes; lastLabel = label;
 
-      if (pdfBytes.length <= TARGET_BYTES) {
-        entry.blob   = new Blob([pdfBytes], { type: 'application/pdf' });
+      if (pdfBytes.length <= targetBytes) {
+        setSingleOutput(entry, '_compressed', new Blob([pdfBytes], { type: 'application/pdf' }));
         entry.status = 'compressed';
         const pct    = Math.round((1 - pdfBytes.length / originalSize) * 100);
         hideProgress(id);
@@ -554,13 +757,36 @@ async function compressSingle(entry) {
   }
 
   if (lastBytes) {
-    entry.blob   = new Blob([lastBytes], { type: 'application/pdf' });
+    const smallestBlob = new Blob([lastBytes], { type: 'application/pdf' });
+    if (oversizeAction === 'split-parts') {
+      try {
+        setBadge(id, 'working', 'splitting…');
+        setProgress(id, 100, 'Creating smaller parts…');
+        const baseName = file.name.replace(/\.pdf$/i, '') + '_compressed';
+        const parts = await splitBlobIntoParts(smallestBlob, baseName, splitTargetBytes);
+        if (parts.length > 1) {
+          entry.outputs = parts;
+          entry.status = 'split';
+          hideProgress(id);
+          $(`arrow-${id}`).style.display = '';
+          $(`final-${id}`).textContent = `${parts.length} parts`; 
+          setBadge(id, 'ok', `split into ${parts.length}`);
+          finishCard(id, 'done-ok');
+          $(`dl-card-${id}`).classList.add('visible');
+          return;
+        }
+      } catch (_) {
+        // Fall through to keep-smallest output
+      }
+    }
+
+    setSingleOutput(entry, '_compressed', smallestBlob);
     entry.status = 'partial';
-    const pct    = Math.round((1 - lastBytes.length / originalSize) * 100);
+    const pct = Math.round((1 - lastBytes.length / originalSize) * 100);
     hideProgress(id);
     $(`arrow-${id}`).style.display = '';
     $(`final-${id}`).textContent = fmtSize(lastBytes.length) + ' ⚠';
-    setBadge(id, 'warn', `still large (−${pct}%)`);
+    setBadge(id, 'warn', `still large (−${pct}%)` + (lastLabel ? ` · ${lastLabel}` : ''));
     finishCard(id, 'done-warn');
     $(`dl-card-${id}`).classList.add('visible');
   } else {
@@ -580,6 +806,7 @@ function markError(id, entry, msg) {
 
 async function startCompression() {
   if (isRunning || !entries.length) return;
+  applySettings();
   isRunning = true;
 
   const btn = $('compress-btn'), spinner = $('btn-spinner'), lbl = $('compress-label');
@@ -601,18 +828,20 @@ async function startCompression() {
 }
 
 function showResultsPanel() {
-  const done       = entries.filter(e => e.blob != null);
+  const done       = entries.filter(e => (e.outputs || []).length > 0);
   if (!done.length) return;
 
   const compressed = done.filter(e => e.status === 'compressed');
   const skipped    = done.filter(e => e.status === 'skipped');
   const partial    = done.filter(e => e.status === 'partial');
-  const saved      = compressed.reduce((a, e) => a + (e.file.size - e.blob.size), 0);
+  const split      = done.filter(e => e.status === 'split');
+  const saved      = done.reduce((a, e) => a + Math.max(0, e.file.size - outputSize(e)), 0);
 
   const parts = [];
   if (compressed.length) parts.push(`<span>${compressed.length}</span> compressed`);
   if (skipped.length)    parts.push(`<span>${skipped.length}</span> already OK`);
   if (partial.length)    parts.push(`<span>${partial.length}</span> still large`);
+  if (split.length)      parts.push(`<span>${split.length}</span> split`);
   if (saved > 0)         parts.push(`<span>${fmtSize(saved)}</span> saved`);
 
   $('results-title-text').textContent = `${done.length} file${done.length > 1 ? 's' : ''} ready`;
@@ -624,38 +853,72 @@ function showResultsPanel() {
 
 function downloadEntry(id) {
   const e = entries.find(e => e.id === id);
-  if (!e?.blob) return;
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(e.blob);
-  a.download = e.file.name.replace(/\.pdf$/i, '') + '_compressed.pdf';
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(a.href), 15000);
+  if (!e || !e.outputs || !e.outputs.length) return;
+
+  if (e.outputs.length === 1) {
+    const out = e.outputs[0];
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(out.blob);
+    a.download = out.name;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 15000);
+    return;
+  }
+
+  const zip = new JSZip();
+  for (const out of e.outputs) zip.file(out.name, out.blob);
+  zip.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 1 } }).then((blob) => {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = e.file.name.replace(/\.pdf$/i, '') + '_parts.zip';
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 20000);
+  });
+}
+
+function collectAllOutputs() {
+  const collected = [];
+  for (const e of entries) {
+    if (!e.outputs) continue;
+    for (const out of e.outputs) collected.push(out);
+  }
+  return collected;
 }
 
 // Staggered individual downloads — iOS blocks simultaneous download triggers
 async function downloadAllIndividual() {
-  const done = entries.filter(e => e.blob);
-  for (let i = 0; i < done.length; i++) {
-    downloadEntry(done[i].id);
-    if (i < done.length - 1) await new Promise(r => setTimeout(r, 700));
+  const outputs = collectAllOutputs();
+  for (let i = 0; i < outputs.length; i++) {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(outputs[i].blob);
+    a.download = outputs[i].name;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 15000);
+    if (i < outputs.length - 1) await new Promise(r => setTimeout(r, 700));
   }
 }
 
 async function downloadZip() {
-  const done = entries.filter(e => e.blob);
-  if (!done.length) return;
-  if (done.length === 1) { downloadEntry(done[0].id); return; }
+  const outputs = collectAllOutputs();
+  if (!outputs.length) return;
+  if (outputs.length === 1) {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(outputs[0].blob);
+    a.download = outputs[0].name;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 15000);
+    return;
+  }
 
   const btn = $('dl-zip-btn'), orig = btn.innerHTML;
   btn.textContent = 'Building ZIP…'; btn.disabled = true;
   try {
     const zip = new JSZip();
-    for (const e of done)
-      zip.file(e.file.name.replace(/\.pdf$/i, '') + '_compressed.pdf', e.blob);
+    for (const out of outputs) zip.file(out.name, out.blob);
     const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 1 } });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = 'sap_books_compressed.zip';
+    a.download = 'pdf_toolkit_outputs.zip';
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 20000);
   } finally { btn.innerHTML = orig; btn.disabled = false; }
