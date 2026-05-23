@@ -15,7 +15,6 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
   <script>
     (function () {
       function applyTheme(theme) {
@@ -44,17 +43,14 @@
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     :root {
-      --bg: #0d0d0d; --surface: #161616; --surface2: #1f1f1f; --border: #2c2c2c;
-      --text: #e2e2e2; --muted: #6b6b6b; --green: #4ade80; --green-dim: #14532d;
+      --green: #4ade80; --green-dim: #14532d;
       --amber: #fbbf24; --amber-dim: #78350f; --red: #f87171; --red-dim: #7f1d1d;
-      --blue: #60a5fa; --accent: #a78bfa;
-      --mono: 'IBM Plex Mono', monospace; --sans: 'IBM Plex Sans', sans-serif;
+      --blue: #60a5fa;
     }
     html[data-theme="light"] {
-      --bg: #f7f7f7; --surface: #ffffff; --surface2: #f2f2f2; --border: #e4e4e4;
-      --text: #111111; --muted: #707070; --green: #166534; --green-dim: #d1fae5;
+      --green: #166534; --green-dim: #d1fae5;
       --amber: #b45309; --amber-dim: #fef3c7; --red: #b91c1c; --red-dim: #fee2e2;
-      --blue: #1d4ed8; --accent: #7c3aed;
+      --blue: #1d4ed8;
     }
     html, body { background: var(--bg); color: var(--text); font-family: var(--sans);
       font-size: 15px; -webkit-font-smoothing: antialiased; }
