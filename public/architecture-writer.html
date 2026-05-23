@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Architecture Writer</title>
+  <script>
+    (function () {
+      var m = document.cookie.match(/(?:^|;\s*)theme=(light|dark)/);
+      var cookieTheme = m ? m[1] : null;
+      var localTheme = null;
+      try { localTheme = localStorage.getItem('theme'); } catch (_) {}
+      var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+      var theme = cookieTheme || localTheme || (prefersDark ? 'dark' : 'light');
+      document.documentElement.setAttribute('data-theme', theme);
+    })();
+  </script>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #0d0d0d;
+      --surface: #161616;
+      --surface2: #1f1f1f;
+      --border: #2c2c2c;
+      --text: #e2e2e2;
+      --muted: #6b6b6b;
+      --accent: #a78bfa;
+      --ok: #4ade80;
+      --warn: #fbbf24;
+      --bad: #f87171;
+      --sans: 'IBM Plex Sans', sans-serif;
+      --mono: 'IBM Plex Mono', monospace;
+    }
+    html[data-theme="light"] {
+      --bg: #f7f7f7;
+      --surface: #ffffff;
+      --surface2: #f2f2f2;
+      --border: #e4e4e4;
+      --text: #111111;
+      --muted: #707070;
+      --accent: #7c3aed;
+      --ok: #166534;
+      --warn: #92400e;
+      --bad: #b91c1c;
+    }
+    html, body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--sans);
+      min-height: 100%;
+      -webkit-font-smoothing: antialiased;
+    }
+    body { padding: 18px 20px 24px; }
+    .container { max-width: 980px; margin: 0 auto; }
+    header {
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 12px;
+      margin-bottom: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .title h1 { font-size: 19px; font-weight: 600; margin-bottom: 3px; }
+    .subtitle { font-size: 12px; color: var(--muted); }
+    .back-link {
+      text-decoration: none;
+      font-size: 12px;
+      color: var(--muted);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 7px 10px;
+      white-space: nowrap;
+    }
+    .back-link:hover { color: var(--text); border-color: var(--accent); }
+    .global-nav {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 12px;
+    }
+    .global-nav a {
+      text-decoration: none;
+      font-size: 12px;
+      color: var(--muted);
+      border: 1px solid var(--border);
+      background: var(--surface);
+      border-radius: 999px;
+      padding: 6px 10px;
+      transition: color 0.15s, border-color 0.15s;
+    }
+    .global-nav a:hover { color: var(--text); border-color: var(--accent); }
+    .global-nav a.active {
+      color: var(--text);
+      border-color: var(--accent);
+      background: color-mix(in srgb, var(--accent) 12%, var(--surface));
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 1.05fr 0.95fr;
+      gap: 12px;
+      align-items: start;
+    }
+
+    .panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 12px;
+    }
+
+    .panel h2 {
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--muted);
+      margin-bottom: 10px;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+
+    .field { display: flex; flex-direction: column; gap: 5px; }
+    .field span { font-size: 12px; color: var(--muted); }
+
+    .field input,
+    .field textarea,
+    .field select {
+      width: 100%;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--text);
+      border-radius: 8px;
+      padding: 8px 10px;
+      font-size: 13px;
+      font-family: var(--sans);
+    }
+
+    .field textarea { min-height: 84px; resize: vertical; }
+    .field.full { grid-column: 1 / -1; }
+
+    .actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+    .btn {
+      border: 1px solid var(--border);
+      background: var(--surface2);
+      color: var(--text);
+      border-radius: 8px;
+      padding: 9px 12px;
+      font-size: 13px;
+      font-family: var(--sans);
+      cursor: pointer;
+    }
+    .btn:hover { border-color: var(--accent); }
+    .btn.primary {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #0d0d0d;
+      font-weight: 600;
+    }
+
+    .result {
+      min-height: 260px;
+      max-height: 70vh;
+      overflow: auto;
+      white-space: pre-wrap;
+      font-size: 12px;
+      line-height: 1.55;
+      color: var(--text);
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px;
+      font-family: var(--mono);
+    }
+
+    .status {
+      margin-top: 8px;
+      font-size: 12px;
+      color: var(--muted);
+      min-height: 18px;
+    }
+
+    .rubric-grid {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 8px;
+      margin-top: 8px;
+      align-items: center;
+    }
+
+    .rubric-item {
+      padding: 8px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--surface2);
+      font-size: 12px;
+      color: var(--text);
+    }
+
+    .rubric-item small { color: var(--muted); display: block; margin-top: 2px; }
+
+    .rubric-grid select {
+      width: 70px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--text);
+      border-radius: 8px;
+      padding: 6px;
+      font-size: 12px;
+    }
+
+    .score-box {
+      margin-top: 10px;
+      padding: 10px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--surface2);
+      font-size: 12px;
+      line-height: 1.55;
+    }
+
+    .score-pass { color: var(--ok); }
+    .score-warn { color: var(--warn); }
+    .score-fail { color: var(--bad); }
+
+    @media (max-width: 900px) {
+      .layout { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 680px) {
+      .grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div class="title">
+        <h1>Architecture Writer</h1>
+        <div class="subtitle">Generate architecture write-up drafts + evaluate with rubric scoring</div>
+      </div>
+      <a class="back-link" href="/">All tools</a>
+    </header>
+    <nav class="global-nav" aria-label="Global" style="margin-bottom: 12px;">
+      <a href="https://sajivfrancis.com/">Home</a>
+      <a href="https://sajivfrancis.com/blog/">Writing</a>
+      <a href="https://sajivfrancis.com/news/">News</a>
+      <a href="https://sajivfrancis.com/about/">About</a>
+      <a href="https://sajivfrancis.com/lab/ea-explorer/">Lab</a>
+      <a class="active" href="/">Tools</a>
+      <a href="https://docs.sajivfrancis.com/">Docs</a>
+      <a href="https://chat.sajivfrancis.com/">Chat</a>
+    </nav>
+
+    <div class="layout">
+      <section class="panel">
+        <h2>Input brief</h2>
+
+        <div class="grid">
+          <label class="field">
+            <span>Project name</span>
+            <input type="text" id="projectName" placeholder="Gravitite Workflow Library" />
+          </label>
+
+          <label class="field">
+            <span>Decision horizon (weeks)</span>
+            <input type="number" id="horizon" min="2" value="12" />
+          </label>
+
+          <label class="field full">
+            <span>Problem statement</span>
+            <textarea id="problem">Need a repeatable architecture workflow that creates grounded write-ups with alternatives, tradeoff scoring, and implementation paths.</textarea>
+          </label>
+
+          <label class="field full">
+            <span>In scope (comma-separated)</span>
+            <input type="text" id="inScope" value="Option generation, tradeoff matrix, ADR drafts, 90-day plan" />
+          </label>
+
+          <label class="field full">
+            <span>Out of scope (comma-separated)</span>
+            <input type="text" id="outScope" value="Full CI/CD automation, enterprise-wide orchestration" />
+          </label>
+
+          <label class="field">
+            <span>Budget level</span>
+            <select id="budget">
+              <option value="low">low</option>
+              <option value="medium" selected>medium</option>
+              <option value="high">high</option>
+            </select>
+          </label>
+
+          <label class="field">
+            <span>Team size</span>
+            <input type="number" id="team" min="1" value="2" />
+          </label>
+
+          <label class="field full">
+            <span>NFRs (comma-separated)</span>
+            <input type="text" id="nfrs" value="99.9% availability, logs + traceability, local secrets only, portable runner" />
+          </label>
+
+          <label class="field full">
+            <span>Integration dependencies (comma-separated)</span>
+            <input type="text" id="deps" value="GitHub repos, tools site, docs site, local machine workflows" />
+          </label>
+
+          <label class="field full">
+            <span>Key assumptions</span>
+            <textarea id="assumptions">Users can provide structured briefs. Public and private workflows can be separated by policy tags.</textarea>
+          </label>
+        </div>
+
+        <div class="actions">
+          <button class="btn primary" id="generateBtn">Generate draft output</button>
+          <button class="btn" id="copyBtn">Copy result</button>
+          <button class="btn" id="loadSampleBtn">Reset sample</button>
+        </div>
+
+        <div class="status" id="status">Ready.</div>
+      </section>
+
+      <section class="panel">
+        <h2>Generated result</h2>
+        <div id="result" class="result">Generate a draft to see output here.</div>
+      </section>
+
+      <section class="panel" style="grid-column: 1 / -1;">
+        <h2>Evaluation rubric (0-5)</h2>
+        <div id="rubric"></div>
+        <div class="actions">
+          <button class="btn primary" id="scoreBtn">Calculate score</button>
+        </div>
+        <div class="score-box" id="scoreBox">Assign scores, then calculate.</div>
+      </section>
+    </div>
+  </div>
+
+  <script>
+    const RUBRIC = [
+      { key: 'grounding', label: 'Grounding quality', hint: 'How specifically output reflects input constraints and context' },
+      { key: 'alternatives', label: 'Alternative quality', hint: 'Three distinct and viable options' },
+      { key: 'tradeoffs', label: 'Tradeoff rigor', hint: 'Weighted scoring and explicit tradeoff logic' },
+      { key: 'recommendation', label: 'Recommendation clarity', hint: 'Clear decision and why-not analysis' },
+      { key: 'implementation', label: 'Implementation realism', hint: 'Sequenced 90-day plan with practical milestones' },
+      { key: 'operability', label: 'Operability and risk', hint: 'SLO/security/operational risk coverage' },
+      { key: 'adr', label: 'ADR quality', hint: 'Decision-ready ADRs with consequences' },
+    ];
+
+    function byId(id) { return document.getElementById(id); }
+
+    function splitCsv(text) {
+      return text
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean);
+    }
+
+    function loadSample() {
+      byId('projectName').value = 'Enterprise Architecture Write-up Assistant';
+      byId('horizon').value = '12';
+      byId('problem').value = 'Need a repeatable architecture workflow that creates grounded write-ups with alternatives, tradeoff scoring, and implementation paths.';
+      byId('inScope').value = 'Option generation, tradeoff matrix, ADR drafts, 90-day implementation plan';
+      byId('outScope').value = 'Full CI/CD deployment automation, enterprise-wide runtime orchestration';
+      byId('budget').value = 'medium';
+      byId('team').value = '2';
+      byId('nfrs').value = '99.9% availability, local-first execution, structured logs, policy-based visibility';
+      byId('deps').value = 'GitHub repositories, tools site, docs site, local machine workflows';
+      byId('assumptions').value = 'Users can provide structured briefs. Public and private workflows can be separated by policy tags.';
+      byId('status').textContent = 'Sample loaded.';
+    }
+
+    function gatherInput() {
+      return {
+        projectName: byId('projectName').value.trim(),
+        horizon: byId('horizon').value.trim(),
+        problem: byId('problem').value.trim(),
+        inScope: splitCsv(byId('inScope').value),
+        outScope: splitCsv(byId('outScope').value),
+        budget: byId('budget').value,
+        team: byId('team').value.trim(),
+        nfrs: splitCsv(byId('nfrs').value),
+        deps: splitCsv(byId('deps').value),
+        assumptions: byId('assumptions').value.trim(),
+      };
+    }
+
+    function validateInput(input) {
+      if (!input.projectName) return 'Project name is required.';
+      if (!input.problem || input.problem.length < 20) return 'Problem statement should be at least 20 characters.';
+      if (!input.inScope.length) return 'Add at least one in-scope item.';
+      if (!input.outScope.length) return 'Add at least one out-of-scope item.';
+      if (!input.nfrs.length) return 'Add at least one NFR.';
+      if (!input.deps.length) return 'Add at least one dependency.';
+      return '';
+    }
+
+    function buildOption(name, strengths, risks) {
+      return `### ${name}\n- Architecture summary: ${strengths.join('; ')}\n- Risks: ${risks.join('; ')}\n`;
+    }
+
+    function generateDraft(input) {
+      const optionA = buildOption(
+        'Option A - Local-first workflow pack',
+        [
+          'Fast setup for personal and workplace machines',
+          'Low operational overhead',
+          'Strong portability',
+        ],
+        [
+          'Limited centralized observability',
+          'Version drift across machines',
+        ]
+      );
+
+      const optionB = buildOption(
+        'Option B - Hybrid orchestrator + local runners',
+        [
+          'Shared policy governance with local execution',
+          'Balanced control and flexibility',
+          'Good fit for public/private split',
+        ],
+        [
+          'Needs connector hardening',
+          'Moderate implementation complexity',
+        ]
+      );
+
+      const optionC = buildOption(
+        'Option C - Hosted orchestration platform',
+        [
+          'Centralized visibility and standardization',
+          'Easier team-wide rollout',
+          'Consistent artifact retention',
+        ],
+        [
+          'Higher cost and ops burden',
+          'Data governance concerns for private workflows',
+        ]
+      );
+
+      return `# Architecture Write-up Draft\n\n## 1. Executive summary\n${input.projectName} should start with a hybrid model that keeps agent workflow logic portable while enforcing shared policy and output standards.\n\n## 2. Problem framing and constraints\n- Problem: ${input.problem}\n- In scope: ${input.inScope.join('; ')}\n- Out of scope: ${input.outScope.join('; ')}\n- Budget/team: ${input.budget} budget, team size ${input.team}\n- Decision horizon: ${input.horizon} weeks\n- Assumptions: ${input.assumptions}\n\n## 3. Architecture options\n${optionA}\n${optionB}\n${optionC}\n## 4. Weighted scoring matrix\n| Criterion | Weight | A | B | C |\n|---|---:|---:|---:|---:|\n| Delivery speed | 20 | 5 | 4 | 2 |\n| Cost profile | 15 | 5 | 4 | 2 |\n| Operability | 20 | 2 | 4 | 5 |\n| Security/compliance fit | 20 | 3 | 4 | 4 |\n| Portability | 15 | 5 | 4 | 2 |\n| Scalability | 10 | 3 | 4 | 5 |\n| **Total (weighted)** | 100 | **3.95** | **4.00** | **3.30** |\n\n## 5. Recommendation and rationale\nRecommend Option B (hybrid orchestrator + local runners) because it best balances governance, portability, and future team-scale growth.\n\nWhy not A: strong portability but weak shared controls and observability.\nWhy not C: strong centralization but high cost and data-governance complexity at this stage.\n\n## 6. ADR drafts\n- ADR-001: Adopt hybrid architecture writer runtime model\n- ADR-002: Enforce public/private workflow policy tagging\n- ADR-003: Standardize output contract for architecture artifacts\n\n## 7. 90-day implementation plan\n- Weeks 1-4: finalize schema + template + rubric and CLI runner\n- Weeks 5-8: add policy tagging, artifact storage, and validation hooks\n- Weeks 9-12: add pack distribution, versioning, and onboarding docs\n\n## 8. Risk register\n1. Inconsistent input quality -> add input validation + prompts\n2. Policy drift -> central policy manifest + version pinning\n3. Runner fragmentation -> compatibility matrix and conformance tests\n4. Weak adoption -> provide one-click starter packs\n5. Sensitive output leakage -> default private mode + manual publish gate\n\n## 9. Input footprint\n- NFRs: ${input.nfrs.join('; ')}\n- Dependencies: ${input.deps.join('; ')}\n`;
+    }
+
+    function renderRubric() {
+      const host = byId('rubric');
+      host.innerHTML = '';
+      for (const row of RUBRIC) {
+        const wrap = document.createElement('div');
+        wrap.className = 'rubric-grid';
+
+        const label = document.createElement('div');
+        label.className = 'rubric-item';
+        label.innerHTML = `${row.label}<small>${row.hint}</small>`;
+
+        const score = document.createElement('select');
+        score.id = `score-${row.key}`;
+        for (let i = 0; i <= 5; i++) {
+          const option = document.createElement('option');
+          option.value = String(i);
+          option.textContent = String(i);
+          if (i === 3) option.selected = true;
+          score.appendChild(option);
+        }
+
+        wrap.appendChild(label);
+        wrap.appendChild(score);
+        host.appendChild(wrap);
+      }
+    }
+
+    function calculateScore() {
+      const scores = RUBRIC.map((r) => Number(byId(`score-${r.key}`).value));
+      const avg = scores.reduce((a, b) => a + b, 0) / scores.length;
+      const min = Math.min.apply(null, scores);
+
+      const pass = avg >= 4 && min >= 3;
+      const scoreClass = pass ? 'score-pass' : (avg >= 3 ? 'score-warn' : 'score-fail');
+
+      byId('scoreBox').innerHTML =
+        `<div><strong>Average score:</strong> ${avg.toFixed(2)} / 5</div>` +
+        `<div><strong>Lowest dimension:</strong> ${min}</div>` +
+        `<div class="${scoreClass}"><strong>Verdict:</strong> ${pass ? 'PASS' : 'FAIL'}</div>` +
+        `<div style="margin-top:6px; color: var(--muted);">Pass rule: average >= 4.0 and no dimension below 3.</div>`;
+    }
+
+    byId('generateBtn').addEventListener('click', function () {
+      const input = gatherInput();
+      const err = validateInput(input);
+      if (err) {
+        byId('status').textContent = err;
+        return;
+      }
+      const out = generateDraft(input);
+      byId('result').textContent = out;
+      byId('status').textContent = 'Draft generated. Score it with the rubric below.';
+    });
+
+    byId('copyBtn').addEventListener('click', async function () {
+      const text = byId('result').textContent || '';
+      if (!text.trim()) {
+        byId('status').textContent = 'Nothing to copy yet.';
+        return;
+      }
+      try {
+        await navigator.clipboard.writeText(text);
+        byId('status').textContent = 'Result copied to clipboard.';
+      } catch (_) {
+        byId('status').textContent = 'Clipboard copy failed on this browser.';
+      }
+    });
+
+    byId('loadSampleBtn').addEventListener('click', loadSample);
+    byId('scoreBtn').addEventListener('click', calculateScore);
+
+    renderRubric();
+    loadSample();
+  </script>
+</body>
+</html>

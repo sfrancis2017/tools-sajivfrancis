@@ -103,6 +103,28 @@
       color: var(--text);
       border-color: var(--accent);
     }
+    .global-nav {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 12px;
+    }
+    .global-nav a {
+      text-decoration: none;
+      font-size: 12px;
+      color: var(--muted);
+      border: 1px solid var(--border);
+      background: var(--surface);
+      border-radius: 999px;
+      padding: 6px 10px;
+      transition: color 0.15s, border-color 0.15s;
+    }
+    .global-nav a:hover { color: var(--text); border-color: var(--accent); }
+    .global-nav a.active {
+      color: var(--text);
+      border-color: var(--accent);
+      background: color-mix(in srgb, var(--accent) 12%, var(--surface));
+    }
 
     .drop-zone {
       border: 2px dashed var(--border);
@@ -273,6 +295,16 @@
         </div>
         <a class="back-link" href="/">All tools</a>
       </div>
+      <nav class="global-nav" aria-label="Global">
+        <a href="https://sajivfrancis.com/">Home</a>
+        <a href="https://sajivfrancis.com/blog/">Writing</a>
+        <a href="https://sajivfrancis.com/news/">News</a>
+        <a href="https://sajivfrancis.com/about/">About</a>
+        <a href="https://sajivfrancis.com/lab/ea-explorer/">Lab</a>
+        <a class="active" href="/">Tools</a>
+        <a href="https://docs.sajivfrancis.com/">Docs</a>
+        <a href="https://chat.sajivfrancis.com/">Chat</a>
+      </nav>
     </header>
 
     <div class="drop-zone" id="drop-zone">
