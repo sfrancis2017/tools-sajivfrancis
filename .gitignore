@@ -1,0 +1,20 @@
+# Secrets — never commit
+.env
+*.env
+!*.env.example
+tools.env
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+
+# Node / Astro
+node_modules/
+dist/
+.astro/
+
+# OS
+.DS_Store
