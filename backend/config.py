@@ -24,6 +24,18 @@ DO_SPACES_CDN_BASE: str = os.getenv("DO_SPACES_CDN_BASE", "").rstrip("/")
 
 ASSET_PREFIX: str = "tools"  # all objects land under tools/… (lifecycle-scoped)
 
+# Publish-to-site (owner-only): commit a generated asset into the main site repo
+# as a permanent, version-controlled banner. Fine-grained GitHub PAT scoped to
+# ONLY the site repo with contents:write.
+SITE_GITHUB_TOKEN: str = os.getenv("SITE_GITHUB_TOKEN", "")
+SITE_REPO: str = os.getenv("SITE_REPO", "sfrancis2017/sajivfrancis.github.io")
+SITE_BRANCH: str = os.getenv("SITE_BRANCH", "master")
+BANNER_DIR: str = os.getenv("BANNER_DIR", "public/img/banners")
+
+
+def github_configured() -> bool:
+    return bool(SITE_GITHUB_TOKEN and SITE_REPO)
+
 ALLOWED_ORIGINS: list[str] = [
     o.strip()
     for o in os.getenv(
