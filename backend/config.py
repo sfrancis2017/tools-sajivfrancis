@@ -11,6 +11,12 @@ load_dotenv()
 
 TOOLS_TOKEN: str = os.getenv("TOOLS_TOKEN", "")
 
+# Claude — for the Map Maker auto-extract (text/url/doc/image → Mermaid). Same
+# key the chat uses; set ANTHROPIC_MODEL=claude-sonnet-4-6 in tools.env to match
+# the chat (default is the higher-quality/cost claude-opus-4-8).
+ANTHROPIC_API_KEY: str = os.getenv("ANTHROPIC_API_KEY", "")
+ANTHROPIC_MODEL: str = os.getenv("ANTHROPIC_MODEL", "claude-opus-4-8")
+
 DO_SPACES_KEY: str = os.getenv("DO_SPACES_KEY", "")
 DO_SPACES_SECRET: str = os.getenv("DO_SPACES_SECRET", "")
 DO_SPACES_BUCKET: str = os.getenv("DO_SPACES_BUCKET", "sajivfrancis-tools")
