@@ -5,6 +5,8 @@ uvicorn[standard]
 python-multipart
 python-dotenv
 boto3
+# Map Maker auto-extract (text/url/doc/image → Mermaid via Claude)
+anthropic
 # Word Art
 wordcloud
 matplotlib
