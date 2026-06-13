@@ -10,7 +10,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 import config
-from tools import diff_tool, map_gen, publish, word_art
+from tools import diff_tool, drawio, map_gen, publish, word_art
 
 app = FastAPI(title="tools.sajivfrancis.com API", version="0.1.0")
 
@@ -34,3 +34,5 @@ app.include_router(diff_tool.router, prefix="/api/diff", tags=["diff"])
 app.include_router(publish.router, prefix="/api/publish", tags=["publish"])
 # Owner-only: turn a URL/document/image into a Mermaid mind/concept/system map
 app.include_router(map_gen.router, prefix="/api/map", tags=["map"])
+# Public: convert any Mermaid flowchart/mindmap into an editable .drawio file
+app.include_router(drawio.router, prefix="/api/convert", tags=["convert"])
