@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import io
 import re
+from typing import Optional
 
 import numpy as np
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
@@ -39,7 +40,7 @@ MAX_W = 2400  # safety clamp
 
 
 # ─── Text extraction ─────────────────────────────────────────────────────────
-def extract_text(source_type: str, *, content: str, url: str, file: UploadFile | None) -> str:
+def extract_text(source_type: str, *, content: str, url: str, file: Optional[UploadFile]) -> str:
     if source_type == "text":
         return content or ""
     if source_type == "url":
@@ -142,7 +143,7 @@ async def generate(
     style: str = Form("cloud"),
     palette: str = Form("midnight"),
     width: int = Form(1920),
-    file: UploadFile | None = File(None),
+    file: Optional[UploadFile] = File(None),
 ):
     """Synchronous: extract → render → upload → return public URL."""
     text = extract_text(source_type, content=content, url=url, file=file)

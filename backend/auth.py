@@ -10,13 +10,14 @@ is here for the LLM/publish tools that come later.
 from __future__ import annotations
 
 import hmac
+from typing import Optional
 
 from fastapi import Header, HTTPException
 
 import config
 
 
-def is_owner(authorization: str | None) -> bool:
+def is_owner(authorization: Optional[str]) -> bool:
     if not config.TOOLS_TOKEN or not authorization:
         return False
     scheme, _, token = authorization.partition(" ")
@@ -26,12 +27,12 @@ def is_owner(authorization: str | None) -> bool:
     return hmac.compare_digest(token, config.TOOLS_TOKEN)
 
 
-def current_is_owner(authorization: str | None = Header(default=None)) -> bool:
+def current_is_owner(authorization: Optional[str] = Header(default=None)) -> bool:
     """FastAPI dependency: resolves owner/public without rejecting."""
     return is_owner(authorization)
 
 
-def require_owner(authorization: str | None = Header(default=None)) -> bool:
+def require_owner(authorization: Optional[str] = Header(default=None)) -> bool:
     """FastAPI dependency: 401 unless a valid owner token is present."""
     if not is_owner(authorization):
         raise HTTPException(status_code=401, detail="owner token required")
