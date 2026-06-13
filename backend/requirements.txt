@@ -1,0 +1,16 @@
+# V1 slice: Word Art + Diff + storage. (moviepy/gTTS/graphviz/anthropic/redis
+# come with later tools.)
+fastapi
+uvicorn[standard]
+python-multipart
+python-dotenv
+boto3
+# Word Art
+wordcloud
+matplotlib
+Pillow
+numpy
+beautifulsoup4
+requests
+python-docx
+PyMuPDF
