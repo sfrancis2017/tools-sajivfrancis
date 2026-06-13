@@ -151,7 +151,11 @@ def _parse_flowchart(lines: list[str], direction: str):
 
 
 def _layout(nodes, edges, direction):
-    # longest-path layering (cycle-bounded by iteration count)
+    """Layered (Sugiyama-style) layout that approximates Mermaid/dagre: longest-path
+    layers, a few barycenter ordering passes so children sit under their parents and
+    edge crossings drop, then each layer centered on a common axis."""
+    horizontal = direction in ("LR", "RL")
+    # 1. layers via longest path (cycle-bounded by iteration count)
     layer = {n: 0 for n in nodes}
     for _ in range(len(nodes)):
         changed = False
@@ -161,17 +165,43 @@ def _layout(nodes, edges, direction):
                 changed = True
         if not changed:
             break
-    cols: dict[int, int] = {}
-    pos = {}
-    horizontal = direction in ("LR", "RL")
+    # 2. adjacency
+    preds: dict[str, list[str]] = {n: [] for n in nodes}
+    succs: dict[str, list[str]] = {n: [] for n in nodes}
+    for a, b, _l in edges:
+        if a in nodes and b in nodes:
+            succs[a].append(b)
+            preds[b].append(a)
+    # 3. group by layer (first-appearance order seeds the ordering)
+    order: dict[int, list[str]] = {}
     for n in nodes:
-        lv = layer.get(n, 0)
-        c = cols.get(lv, 0)
-        cols[lv] = c + 1
-        if horizontal:
-            pos[n] = (40 + lv * 220, 40 + c * 110)
-        else:
-            pos[n] = (40 + c * 200, 40 + lv * 130)
+        order.setdefault(layer.get(n, 0), []).append(n)
+    maxlv = max(order) if order else 0
+
+    def _bary(ids, ref_index, neighbors):
+        cur = {n: i for i, n in enumerate(ids)}
+        def key(n):
+            vals = [ref_index[x] for x in neighbors[n] if x in ref_index]
+            return sum(vals) / len(vals) if vals else cur[n]  # keep stable if no link
+        ids.sort(key=key)
+
+    # 4. alternate down/up barycenter passes
+    for _ in range(4):
+        for lv in range(1, maxlv + 1):
+            _bary(order[lv], {n: i for i, n in enumerate(order.get(lv - 1, []))}, preds)
+        for lv in range(maxlv - 1, -1, -1):
+            _bary(order[lv], {n: i for i, n in enumerate(order.get(lv + 1, []))}, succs)
+
+    # 5. positions — center each layer on the widest layer's axis
+    GAP_MAIN, GAP_CROSS = 150, 200
+    widest = max((len(ids) for ids in order.values()), default=1)
+    pos = {}
+    for lv, ids in order.items():
+        offset = (widest - len(ids)) * GAP_CROSS / 2.0
+        for i, n in enumerate(ids):
+            cross = 40 + offset + i * GAP_CROSS
+            main = 40 + lv * GAP_MAIN
+            pos[n] = (main, cross) if horizontal else (cross, main)
     return nodes, edges, pos
 
 
