@@ -38,7 +38,29 @@ _EDGE_STYLE = "edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;"
 # edge operators (longest first so -.-> beats --)
 _EDGE_OP = re.compile(r"\s*(-{2,3}>|-\.->|-\.-|={2,3}>|={2,3}|--[ox]|--)\s*(\|[^|]*\|)?\s*")
 _ID = re.compile(r"^([A-Za-z0-9_]+)\s*(.*)$")
-_SKIP = re.compile(r"^\s*(subgraph\b|end\b|classDef\b|class\b|style\b|linkStyle\b|direction\b|%%)", re.I)
+_SKIP = re.compile(r"^\s*(subgraph\b|end\b|linkStyle\b|direction\b|%%)", re.I)
+
+
+def _mm_props_to_drawio(props: str) -> str:
+    """Translate Mermaid style props (fill:#x,stroke:#y,color:#z,stroke-width:2px)
+    into draw.io style fragments (fillColor=#x;strokeColor=#y;...)."""
+    out = []
+    for part in props.split(","):
+        if ":" not in part:
+            continue
+        k, v = part.split(":", 1)
+        k, v = k.strip().lower(), v.strip()
+        if k == "fill":
+            out.append(f"fillColor={v};")
+        elif k == "stroke":
+            out.append(f"strokeColor={v};")
+        elif k == "color":
+            out.append(f"fontColor={v};")
+        elif k == "stroke-width":
+            out.append(f"strokeWidth={v.replace('px', '').strip()};")
+        elif k == "stroke-dasharray":
+            out.append("dashed=1;")
+    return "".join(out)
 
 
 def _clean_label(s: str) -> str:
@@ -48,11 +70,17 @@ def _clean_label(s: str) -> str:
     return s.strip()
 
 
-def _parse_node(text: str, nodes: dict) -> str | None:
-    """Parse 'A[Label]' / 'A((x))' / bare 'A'. Register in nodes, return id."""
+def _parse_node(text: str, nodes: dict, node_class: dict | None = None) -> str | None:
+    """Parse 'A[Label]' / 'A((x))' / 'A[Label]:::cls' / bare 'A'. Register in nodes,
+    record any inline ::: class, return id."""
     text = text.strip()
     if not text:
         return None
+    cm = re.search(r":::([A-Za-z0-9_]+)\s*$", text)  # inline class: A[..]:::name
+    cls = None
+    if cm:
+        cls = cm.group(1)
+        text = text[: cm.start()].strip()
     m = _ID.match(text)
     if not m:
         return None
@@ -67,15 +95,34 @@ def _parse_node(text: str, nodes: dict) -> str | None:
     # last definition wins, but never downgrade a real label back to the bare id
     if nid not in nodes or label != nid:
         nodes[nid] = (label or nid, style)
+    if cls and node_class is not None:
+        node_class[nid] = cls
     return nid
 
 
 def _parse_flowchart(lines: list[str], direction: str):
     nodes: dict[str, tuple[str, str]] = {}
     edges: list[tuple[str, str, str]] = []
+    node_class: dict[str, str] = {}       # node id -> classDef name (class / :::)
+    classdefs: dict[str, str] = {}        # classDef name -> Mermaid props
+    node_style: dict[str, str] = {}       # node id -> inline `style` props
     for raw in lines:
         line = raw.strip()
         if not line or _SKIP.match(line):
+            continue
+        m = re.match(r"^classDef\s+([A-Za-z0-9_]+)\s+(.+?);?$", line, re.I)
+        if m:
+            classdefs[m.group(1)] = m.group(2)
+            continue
+        m = re.match(r"^class\s+([\w, ]+?)\s+([A-Za-z0-9_]+);?$", line, re.I)
+        if m:
+            for nid in re.split(r"[,\s]+", m.group(1).strip()):
+                if nid:
+                    node_class[nid] = m.group(2)
+            continue
+        m = re.match(r"^style\s+([A-Za-z0-9_]+)\s+(.+?);?$", line, re.I)
+        if m:
+            node_style[m.group(1)] = m.group(2)
             continue
         # split into node-chunks separated by edge ops, capturing each op's label
         chunks, ops, idx = [], [], 0
@@ -84,12 +131,22 @@ def _parse_flowchart(lines: list[str], direction: str):
             ops.append((m.group(2) or "").strip("|"))
             idx = m.end()
         chunks.append(line[idx:])
-        ids = [_parse_node(c, nodes) for c in chunks]
+        ids = [_parse_node(c, nodes, node_class) for c in chunks]
         if len(ids) >= 2:
             for i, lbl in enumerate(ops):
                 a, b = ids[i], ids[i + 1]
                 if a and b:
                     edges.append((a, b, lbl.strip()))
+    # fold Mermaid colors (classDef + class/::: + style) into each node's style
+    for nid, (label, style) in list(nodes.items()):
+        extra = ""
+        cls = node_class.get(nid)
+        if cls and cls in classdefs:
+            extra += _mm_props_to_drawio(classdefs[cls])
+        if nid in node_style:
+            extra += _mm_props_to_drawio(node_style[nid])
+        if extra:
+            nodes[nid] = (label, style + extra)
     return _layout(nodes, edges, direction)
 
 
