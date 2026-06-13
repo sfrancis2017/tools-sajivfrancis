@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import html
 import re
+from collections import Counter
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
@@ -297,8 +298,18 @@ def _layout_grouped(nodes, edges, direction, lane_of, lanes, subgraphs):
             ys = [pos[n][1] for n in members]
             x0, y0 = min(xs) - PAD, min(ys) - PAD - TITLE
             x1, y1 = max(xs) + NW + PAD, max(ys) + NH + PAD
+            # color-code the lane by its members' dominant border color (so BDAT
+            # layers become amber/blue/green/purple bands); None → neutral grey.
+            strokes = Counter(
+                m.group(1)
+                for n in members
+                for m in [re.search(r"strokeColor=(#[0-9a-fA-F]{3,8})", nodes[n][1])]
+                if m
+            )
+            stroke = strokes.most_common(1)[0][0] if strokes else None
             containers.append({"id": f"c_{ln}", "title": subgraphs[ln]["title"] or ln,
-                               "x": x0, "y": y0, "w": x1 - x0, "h": y1 - y0})
+                               "x": x0, "y": y0, "w": x1 - x0, "h": y1 - y0,
+                               "stroke": stroke})
             for n in members:
                 node_parent[n] = f"c_{ln}"
         cross_cursor += lane_cols * GAP_CROSS + LANE_GAP
@@ -342,12 +353,16 @@ def _to_mxfile(nodes, edges, pos, containers=None, node_parent=None) -> str:
     cbyid = {c["id"]: c for c in containers}
     cells = ['<mxCell id="0"/>', '<mxCell id="1" parent="0"/>']
     # lane containers first (so child cells can reference them as parent)
-    _CSTYLE = ("rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#9e9e9e;"
-               "verticalAlign=top;fontStyle=1;container=1;collapsible=0;dashed=1;")
+    def _cstyle(stroke):
+        s = stroke or "#9e9e9e"
+        # colored border + bold colored title, transparent fill so node colors show
+        return (f"rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor={s};"
+                f"fontColor={s};strokeWidth=2;verticalAlign=top;fontStyle=1;"
+                f"container=1;collapsible=0;dashed=1;")
     for c in containers:
         cells.append(
             f'<mxCell id="{c["id"]}" value="{html.escape(c["title"], quote=True)}" '
-            f'style="{_CSTYLE}" vertex="1" parent="1">'
+            f'style="{_cstyle(c.get("stroke"))}" vertex="1" parent="1">'
             f'<mxGeometry x="{c["x"]:.0f}" y="{c["y"]:.0f}" '
             f'width="{c["w"]:.0f}" height="{c["h"]:.0f}" as="geometry"/></mxCell>'
         )
