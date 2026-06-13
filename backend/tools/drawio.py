@@ -38,7 +38,7 @@ _EDGE_STYLE = "edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;"
 # edge operators (longest first so -.-> beats --)
 _EDGE_OP = re.compile(r"\s*(-{2,3}>|-\.->|-\.-|={2,3}>|={2,3}|--[ox]|--)\s*(\|[^|]*\|)?\s*")
 _ID = re.compile(r"^([A-Za-z0-9_]+)\s*(.*)$")
-_SKIP = re.compile(r"^\s*(subgraph\b|end\b|linkStyle\b|direction\b|%%)", re.I)
+_SKIP = re.compile(r"^\s*(linkStyle\b|direction\b|%%)", re.I)
 
 
 def _mm_props_to_drawio(props: str) -> str:
@@ -106,9 +106,41 @@ def _parse_flowchart(lines: list[str], direction: str):
     node_class: dict[str, str] = {}       # node id -> classDef name (class / :::)
     classdefs: dict[str, str] = {}        # classDef name -> Mermaid props
     node_style: dict[str, str] = {}       # node id -> inline `style` props
+    subgraphs: dict[str, dict] = {}       # sid -> {"title", "parent"}
+    node_group: dict[str, str] = {}       # node id -> innermost subgraph id
+    group_order: list[str] = []
+    stack: list[str] = []                 # open subgraph ids
+    sg_n = 0
     for raw in lines:
         line = raw.strip()
-        if not line or _SKIP.match(line):
+        if not line:
+            continue
+        sm = re.match(r"^subgraph\b\s*(.*)$", line, re.I)
+        if sm:
+            spec = sm.group(1).strip()
+            bm = re.match(r"^([A-Za-z0-9_]+)\s*\[(.+)\]$", spec)
+            if bm:
+                sid, title = bm.group(1), _clean_label(bm.group(2))
+            elif spec.startswith('"') and spec.endswith('"') and len(spec) >= 2:
+                sg_n += 1
+                sid, title = f"sg{sg_n}", _clean_label(spec)
+            elif spec:
+                sid, title = re.sub(r"[^A-Za-z0-9_]", "_", spec), spec
+            else:
+                sg_n += 1
+                sid, title = f"sg{sg_n}", ""
+            if sid in subgraphs:
+                sg_n += 1
+                sid = f"{sid}_{sg_n}"
+            subgraphs[sid] = {"title": title, "parent": stack[-1] if stack else None}
+            group_order.append(sid)
+            stack.append(sid)
+            continue
+        if re.match(r"^end\b", line, re.I):
+            if stack:
+                stack.pop()
+            continue
+        if _SKIP.match(line):
             continue
         m = re.match(r"^classDef\s+([A-Za-z0-9_]+)\s+(.+?);?$", line, re.I)
         if m:
@@ -132,6 +164,9 @@ def _parse_flowchart(lines: list[str], direction: str):
             idx = m.end()
         chunks.append(line[idx:])
         ids = [_parse_node(c, nodes, node_class) for c in chunks]
+        for nid in ids:
+            if nid and stack and nid not in node_group:
+                node_group[nid] = stack[-1]
         if len(ids) >= 2:
             for i, lbl in enumerate(ops):
                 a, b = ids[i], ids[i + 1]
@@ -147,7 +182,24 @@ def _parse_flowchart(lines: list[str], direction: str):
             extra += _mm_props_to_drawio(node_style[nid])
         if extra:
             nodes[nid] = (label, style + extra)
-    return _layout(nodes, edges, direction)
+
+    # lane = top-level ancestor subgraph of each grouped node
+    def _top(sid):
+        seen = set()
+        while sid and subgraphs.get(sid, {}).get("parent") and sid not in seen:
+            seen.add(sid)
+            sid = subgraphs[sid]["parent"]
+        return sid
+
+    lane_of = {n: _top(g) for n, g in node_group.items()}
+    lanes = [s for s in group_order
+             if subgraphs[s]["parent"] is None and any(v == s for v in lane_of.values())]
+    if lanes:
+        pos, containers, node_parent = _layout_grouped(
+            nodes, edges, direction, lane_of, lanes, subgraphs)
+        return nodes, edges, pos, containers, node_parent
+    _, _, pos = _layout(nodes, edges, direction)
+    return nodes, edges, pos, [], {}
 
 
 def _layout(nodes, edges, direction):
@@ -205,6 +257,54 @@ def _layout(nodes, edges, direction):
     return nodes, edges, pos
 
 
+def _layout_grouped(nodes, edges, direction, lane_of, lanes, subgraphs):
+    """Lane layout: each top-level subgraph becomes a contiguous lane (so the
+    container boxes don't overlap), ungrouped nodes trail in a free lane. Returns
+    (pos, containers, node_parent). Layers (the flow axis) are shared across lanes
+    so the flow lines up; lanes are offset along the cross axis."""
+    horizontal = direction in ("LR", "RL")
+    layer = {n: 0 for n in nodes}
+    for _ in range(len(nodes)):
+        changed = False
+        for a, b, _l in edges:
+            if a in layer and b in layer and layer[b] < layer[a] + 1:
+                layer[b] = layer[a] + 1
+                changed = True
+        if not changed:
+            break
+    FREE = "__free__"
+    lane_nodes = {ln: [] for ln in lanes + [FREE]}
+    for n in nodes:
+        lane_nodes.setdefault(lane_of.get(n, FREE), []).append(n)
+    GAP_MAIN, GAP_CROSS, LANE_GAP, PAD, TITLE, NW, NH = 150, 200, 70, 26, 32, 160, 50
+    pos, containers, node_parent = {}, [], {}
+    cross_cursor = 40
+    for ln in lanes + [FREE]:
+        members = lane_nodes.get(ln) or []
+        if not members:
+            continue
+        by_layer: dict[int, list[str]] = {}
+        for n in members:
+            by_layer.setdefault(layer.get(n, 0), []).append(n)
+        lane_cols = max((len(v) for v in by_layer.values()), default=1)
+        for lv, ns in by_layer.items():
+            for i, n in enumerate(ns):
+                cross = cross_cursor + i * GAP_CROSS
+                main = 40 + lv * GAP_MAIN
+                pos[n] = (main, cross) if horizontal else (cross, main)
+        if ln != FREE:
+            xs = [pos[n][0] for n in members]
+            ys = [pos[n][1] for n in members]
+            x0, y0 = min(xs) - PAD, min(ys) - PAD - TITLE
+            x1, y1 = max(xs) + NW + PAD, max(ys) + NH + PAD
+            containers.append({"id": f"c_{ln}", "title": subgraphs[ln]["title"] or ln,
+                               "x": x0, "y": y0, "w": x1 - x0, "h": y1 - y0})
+            for n in members:
+                node_parent[n] = f"c_{ln}"
+        cross_cursor += lane_cols * GAP_CROSS + LANE_GAP
+    return pos, containers, node_parent
+
+
 def _parse_mindmap(lines: list[str]):
     nodes: dict[str, tuple[str, str]] = {}
     edges: list[tuple[str, str, str]] = []
@@ -236,15 +336,33 @@ def _parse_mindmap(lines: list[str]):
     return nodes, edges, pos
 
 
-def _to_mxfile(nodes, edges, pos) -> str:
+def _to_mxfile(nodes, edges, pos, containers=None, node_parent=None) -> str:
+    containers = containers or []
+    node_parent = node_parent or {}
+    cbyid = {c["id"]: c for c in containers}
     cells = ['<mxCell id="0"/>', '<mxCell id="1" parent="0"/>']
+    # lane containers first (so child cells can reference them as parent)
+    _CSTYLE = ("rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#9e9e9e;"
+               "verticalAlign=top;fontStyle=1;container=1;collapsible=0;dashed=1;")
+    for c in containers:
+        cells.append(
+            f'<mxCell id="{c["id"]}" value="{html.escape(c["title"], quote=True)}" '
+            f'style="{_CSTYLE}" vertex="1" parent="1">'
+            f'<mxGeometry x="{c["x"]:.0f}" y="{c["y"]:.0f}" '
+            f'width="{c["w"]:.0f}" height="{c["h"]:.0f}" as="geometry"/></mxCell>'
+        )
     for nid, (label, style) in nodes.items():
         x, y = pos.get(nid, (40, 40))
         w, h = (80, 80) if "ellipse" in style else (160, 50)
+        parent = node_parent.get(nid)
+        if parent in cbyid:  # geometry is relative to the container origin
+            gx, gy, pref = x - cbyid[parent]["x"], y - cbyid[parent]["y"], parent
+        else:
+            gx, gy, pref = x, y, "1"
         cells.append(
             f'<mxCell id="n_{nid}" value="{html.escape(label, quote=True)}" '
-            f'style="{style}" vertex="1" parent="1">'
-            f'<mxGeometry x="{x}" y="{y}" width="{w}" height="{h}" as="geometry"/></mxCell>'
+            f'style="{style}" vertex="1" parent="{pref}">'
+            f'<mxGeometry x="{gx:.0f}" y="{gy:.0f}" width="{w}" height="{h}" as="geometry"/></mxCell>'
         )
     for i, (a, b, lbl) in enumerate(edges):
         cells.append(
@@ -271,17 +389,19 @@ def mermaid_to_drawio(src: str) -> str:
     if not lines:
         raise ValueError("empty diagram")
     head = lines[0].strip().lower()
+    containers, node_parent = [], {}
     if head.startswith("mindmap"):
         nodes, edges, pos = _parse_mindmap(lines[1:])
     elif head.startswith(("flowchart", "graph")):
         m = re.search(r"\b(TD|TB|BT|LR|RL)\b", lines[0], re.I)
-        nodes, edges, pos = _parse_flowchart(lines[1:], (m.group(1).upper() if m else "TD"))
+        nodes, edges, pos, containers, node_parent = _parse_flowchart(
+            lines[1:], (m.group(1).upper() if m else "TD"))
     else:
         kind = head.split()[0] if head else "unknown"
         raise ValueError(f"draw.io export supports flowchart/graph and mindmap; got '{kind}'")
     if not nodes:
         raise ValueError("no nodes found to convert")
-    return _to_mxfile(nodes, edges, pos)
+    return _to_mxfile(nodes, edges, pos, containers, node_parent)
 
 
 class ConvertRequest(BaseModel):
