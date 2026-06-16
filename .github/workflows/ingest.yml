@@ -1,0 +1,31 @@
+name: Trigger chat re-ingest (tools corpus)
+
+# Tools site deploys via local `wrangler deploy` (no CI build step), so this
+# workflow only handles the post-deploy chat RAG re-ingest. Trigger options:
+#   - workflow_dispatch: fire manually after a local wrangler deploy
+#   - schedule: daily safety-net cron in case manual trigger was skipped
+# Non-fatal -- skips silently until repo secret CHAT_INGEST_TOKEN is set.
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 9 * * *'
+
+jobs:
+  ingest:
+    name: Trigger chat re-ingest
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger chat re-ingest
+        env:
+          CHAT_INGEST_TOKEN: ${{ secrets.CHAT_INGEST_TOKEN }}
+        run: |
+          if [ -z "$CHAT_INGEST_TOKEN" ]; then
+            echo "CHAT_INGEST_TOKEN not set -- skipping chat re-ingest."; exit 0
+          fi
+          curl -fsS -X POST "https://chat-worker.sfrancis2017.workers.dev/ingest/trigger/web" \
+            -H "Authorization: Bearer $CHAT_INGEST_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d '{"sitemap":"https://tools.sajivfrancis.com/sitemap.xml","topic":"tools","prune":true}' \
+            && echo "Chat re-ingest triggered (tools corpus)." \
+            || echo "Chat re-ingest trigger failed (non-fatal)."
