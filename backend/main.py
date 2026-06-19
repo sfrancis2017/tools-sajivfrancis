@@ -10,7 +10,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 import config
-from tools import diff_tool, drawio, map_gen, publish, word_art
+from tools import chart_gen, diff_tool, drawio, map_gen, publish, word_art
 
 app = FastAPI(title="tools.sajivfrancis.com API", version="0.1.0")
 
@@ -36,3 +36,7 @@ app.include_router(publish.router, prefix="/api/publish", tags=["publish"])
 app.include_router(map_gen.router, prefix="/api/map", tags=["map"])
 # Public: convert any Mermaid flowchart/mindmap into an editable .drawio file
 app.include_router(drawio.router, prefix="/api/convert", tags=["convert"])
+# Owner-only: render Plotly/Altair/Matplotlib/Seaborn specs → HTML or PNG/SVG.
+# The chat reaches this via the chat worker proxy (CHAT_TOKEN→TOOLS_TOKEN), so the
+# token never hits the browser and there's no public compute endpoint.
+app.include_router(chart_gen.router, prefix="/api/chart", tags=["chart"])

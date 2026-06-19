@@ -16,3 +16,10 @@ beautifulsoup4
 requests
 python-docx
 PyMuPDF
+# Chart generation (chart_gen.py). matplotlib + numpy already above.
+# kaleido = Plotly static export engine; vl-convert-python = Altair/Vega-Lite export.
+plotly
+kaleido
+altair
+seaborn
+vl-convert-python
