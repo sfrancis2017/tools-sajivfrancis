@@ -5,16 +5,20 @@ from __future__ import annotations
 import difflib
 
 from fastapi import APIRouter
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 router = APIRouter()
 
+# Public, unauthenticated endpoint. difflib.ndiff is ~O(n²) on the line count,
+# so bound each side to keep a malicious payload from exhausting CPU/memory.
+_MAX_DIFF_CHARS = 1_000_000  # 1 MB per side
+
 
 class DiffRequest(BaseModel):
-    original: str
-    modified: str
+    original: str = Field(max_length=_MAX_DIFF_CHARS)
+    modified: str = Field(max_length=_MAX_DIFF_CHARS)
     mode: str = "unified"  # unified | html
-    context: int = 3
+    context: int = Field(default=3, ge=0, le=100)
 
 
 class DiffStats(BaseModel):

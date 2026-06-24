@@ -17,8 +17,13 @@ from wordcloud import STOPWORDS, WordCloud
 
 import config
 import storage
+from netguard import safe_get
 
 router = APIRouter()
+
+# Abuse caps for this PUBLIC, unauthenticated endpoint.
+MAX_UPLOAD_BYTES = 10 * 1024 * 1024  # reject larger file uploads (OOM guard)
+MAX_TEXT_CHARS = 500_000             # truncate extracted text before render
 
 STOP_WORDS = set(STOPWORDS) | {
     "the", "and", "for", "that", "this", "with", "from", "are", "was", "will",
@@ -46,19 +51,23 @@ def extract_text(source_type: str, *, content: str, url: str, file: Optional[Upl
     if source_type == "url":
         if not url:
             raise HTTPException(400, "url required")
-        import requests
         from bs4 import BeautifulSoup
 
-        r = requests.get(url, timeout=15, headers={"User-Agent": "tools.sajivfrancis.com"})
-        r.raise_for_status()
-        soup = BeautifulSoup(r.text, "html.parser")
+        # SSRF-guarded fetch: validates the host is public, refuses redirects,
+        # and caps the body size. Never let a user URL reach internal services.
+        html = safe_get(url, timeout=15, headers={"User-Agent": "tools.sajivfrancis.com"})
+        soup = BeautifulSoup(html, "html.parser")
         for tag in soup(["script", "style", "nav", "footer", "header", "aside"]):
             tag.decompose()
         return soup.get_text(" ", strip=True)
     if source_type == "file":
         if file is None:
             raise HTTPException(400, "file required")
-        raw = file.file.read()
+        # Read at most MAX_UPLOAD_BYTES + 1 so an oversized upload is rejected
+        # instead of being slurped whole into memory.
+        raw = file.file.read(MAX_UPLOAD_BYTES + 1)
+        if len(raw) > MAX_UPLOAD_BYTES:
+            raise HTTPException(413, f"file too large (max {MAX_UPLOAD_BYTES // (1024 * 1024)} MB)")
         name = (file.filename or "").lower()
         if name.endswith(".docx"):
             import docx  # python-docx
@@ -147,6 +156,10 @@ async def generate(
 ):
     """Synchronous: extract → render → upload → return public URL."""
     text = extract_text(source_type, content=content, url=url, file=file)
+    # Cap before render — WordCloud only keeps 60 words anyway, but the regex
+    # normalize over unbounded text is the expensive part. Bounds CPU/memory.
+    if len(text) > MAX_TEXT_CHARS:
+        text = text[:MAX_TEXT_CHARS]
     png = render(text, shape, style, palette, width=width)
     if not config.storage_configured():
         raise HTTPException(503, "storage not configured (DO_SPACES_* env missing)")

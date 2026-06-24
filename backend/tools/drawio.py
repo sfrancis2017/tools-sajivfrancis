@@ -16,9 +16,13 @@ import re
 from collections import Counter
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 router = APIRouter()
+
+# Public, unauthenticated endpoint — bound the Mermaid source so the parser /
+# layout can't be driven to exhaust CPU/memory with a giant graph.
+_MAX_MERMAID_CHARS = 200_000
 
 # ── node shape detection ──────────────────────────────────────────────────────
 # (open, close, drawio style) — ORDER MATTERS: longest/most-specific first.
@@ -420,8 +424,8 @@ def mermaid_to_drawio(src: str) -> str:
 
 
 class ConvertRequest(BaseModel):
-    mermaid: str
-    filename: str = "diagram"
+    mermaid: str = Field(max_length=_MAX_MERMAID_CHARS)
+    filename: str = Field(default="diagram", max_length=200)
 
 
 @router.post("/drawio")
