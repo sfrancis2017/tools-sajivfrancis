@@ -209,21 +209,68 @@ def _parse_flowchart(lines: list[str], direction: str):
     return nodes, edges, pos, [], {}
 
 
+def _node_size(label, style):
+    """Box size for a node. Ellipses stay square; every other shape grows taller to
+    fit multi-line (`<br>`) labels so text isn't clipped when opened in draw.io."""
+    if "ellipse" in style:
+        return 80, 80
+    lines = label.count("<br") + 1
+    return 160, max(50, 22 * lines + 14)
+
+
+def _layers(nodes, edges):
+    """Longest-path layering that's safe on cyclic graphs. Architecture diagrams
+    routinely carry feedback edges (SSE return paths, bidirectional tunnels); naive
+    longest-path never converges on a cycle and inflates layer numbers — hence
+    coordinates — to absurd values (nodes flung 10k+ px apart). Break cycles first
+    by dropping DFS back-edges from the layering pass only (they're still drawn),
+    then relax over the remaining DAG so layers stay bounded and contiguous."""
+    succ: dict[str, list[str]] = {n: [] for n in nodes}
+    for a, b, _l in edges:
+        if a in nodes and b in nodes and a != b:
+            succ[a].append(b)
+    # DFS; an edge to a node currently on the recursion stack (GRAY) is a back-edge.
+    WHITE, GRAY, BLACK = 0, 1, 2
+    color = {n: WHITE for n in nodes}
+    back: set[tuple[str, str]] = set()
+    for root in nodes:
+        if color[root] != WHITE:
+            continue
+        color[root] = GRAY
+        stack = [(root, iter(succ[root]))]
+        while stack:
+            node, it = stack[-1]
+            for nb in it:
+                if color[nb] == GRAY:
+                    back.add((node, nb))
+                elif color[nb] == WHITE:
+                    color[nb] = GRAY
+                    stack.append((nb, iter(succ[nb])))
+                    break
+            else:
+                color[node] = BLACK
+                stack.pop()
+    fwd = [(a, b) for a, b, _l in edges
+           if a in nodes and b in nodes and a != b and (a, b) not in back]
+    layer = {n: 0 for n in nodes}
+    for _ in range(len(nodes) + 1):
+        changed = False
+        for a, b in fwd:
+            if layer[b] < layer[a] + 1:
+                layer[b] = layer[a] + 1
+                changed = True
+        if not changed:
+            break
+    return layer
+
+
 def _layout(nodes, edges, direction):
     """Layered (Sugiyama-style) layout that approximates Mermaid/dagre: longest-path
     layers, a few barycenter ordering passes so children sit under their parents and
     edge crossings drop, then each layer centered on a common axis."""
     horizontal = direction in ("LR", "RL")
-    # 1. layers via longest path (cycle-bounded by iteration count)
-    layer = {n: 0 for n in nodes}
-    for _ in range(len(nodes)):
-        changed = False
-        for a, b, _l in edges:
-            if a in layer and b in layer and layer[b] < layer[a] + 1:
-                layer[b] = layer[a] + 1
-                changed = True
-        if not changed:
-            break
+    # 1. cycle-safe longest-path layering (feedback edges no longer blow up coords)
+    layer = _layers(nodes, edges)
     # 2. adjacency
     preds: dict[str, list[str]] = {n: [] for n in nodes}
     succs: dict[str, list[str]] = {n: [] for n in nodes}
@@ -275,20 +322,12 @@ def _layout_grouped(nodes, edges, direction, lane_of, lanes, subgraphs):
     (pos, containers, node_parent). Layers (the flow axis) are shared across lanes
     so the flow lines up; lanes are offset along the cross axis."""
     horizontal = direction in ("LR", "RL")
-    layer = {n: 0 for n in nodes}
-    for _ in range(len(nodes)):
-        changed = False
-        for a, b, _l in edges:
-            if a in layer and b in layer and layer[b] < layer[a] + 1:
-                layer[b] = layer[a] + 1
-                changed = True
-        if not changed:
-            break
+    layer = _layers(nodes, edges)
     FREE = "__free__"
     lane_nodes = {ln: [] for ln in lanes + [FREE]}
     for n in nodes:
         lane_nodes.setdefault(lane_of.get(n, FREE), []).append(n)
-    GAP_MAIN, GAP_CROSS, LANE_GAP, PAD, TITLE, NW, NH = 150, 200, 70, 26, 32, 160, 50
+    GAP_MAIN, GAP_CROSS, LANE_GAP, PAD, TITLE = 150, 200, 70, 26, 32
     pos, containers, node_parent = {}, [], {}
     cross_cursor = 40
     for ln in lanes + [FREE]:
@@ -305,10 +344,12 @@ def _layout_grouped(nodes, edges, direction, lane_of, lanes, subgraphs):
                 main = 40 + lv * GAP_MAIN
                 pos[n] = (main, cross) if horizontal else (cross, main)
         if ln != FREE:
+            sizes = {n: _node_size(nodes[n][0], nodes[n][1]) for n in members}
             xs = [pos[n][0] for n in members]
             ys = [pos[n][1] for n in members]
             x0, y0 = min(xs) - PAD, min(ys) - PAD - TITLE
-            x1, y1 = max(xs) + NW + PAD, max(ys) + NH + PAD
+            x1 = max(pos[n][0] + sizes[n][0] for n in members) + PAD
+            y1 = max(pos[n][1] + sizes[n][1] for n in members) + PAD
             # color-code the lane by its members' dominant border color (so BDAT
             # layers become amber/blue/green/purple bands); None → neutral grey.
             strokes = Counter(
@@ -379,7 +420,7 @@ def _to_mxfile(nodes, edges, pos, containers=None, node_parent=None) -> str:
         )
     for nid, (label, style) in nodes.items():
         x, y = pos.get(nid, (40, 40))
-        w, h = (80, 80) if "ellipse" in style else (160, 50)
+        w, h = _node_size(label, style)
         parent = node_parent.get(nid)
         if parent in cbyid:  # geometry is relative to the container origin
             gx, gy, pref = x - cbyid[parent]["x"], y - cbyid[parent]["y"], parent
