@@ -42,11 +42,19 @@ BANNER_DIR: str = os.getenv("BANNER_DIR", "public/img/banners")
 def github_configured() -> bool:
     return bool(SITE_GITHUB_TOKEN and SITE_REPO)
 
+# Public tools (e.g. the Mermaid→draw.io converter) are called cross-origin from
+# the chat and main-site front-ends, so those origins must be whitelisted here in
+# addition to the tools site itself. Keep in sync with the chat worker's CORS
+# allowlist (chat / sajivfrancis.com / www).
 ALLOWED_ORIGINS: list[str] = [
     o.strip()
     for o in os.getenv(
         "ALLOWED_ORIGINS",
-        "https://tools.sajivfrancis.com,http://localhost:4321",
+        "https://tools.sajivfrancis.com,"
+        "https://chat.sajivfrancis.com,"
+        "https://sajivfrancis.com,"
+        "https://www.sajivfrancis.com,"
+        "http://localhost:4321",
     ).split(",")
     if o.strip()
 ]

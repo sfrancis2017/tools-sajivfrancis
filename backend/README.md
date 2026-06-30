@@ -36,7 +36,7 @@ DO_SPACES_BUCKET=sajivfrancis-tools
 DO_SPACES_REGION=sfo3
 DO_SPACES_ENDPOINT=https://sfo3.digitaloceanspaces.com
 DO_SPACES_CDN_BASE=
-ALLOWED_ORIGINS=https://tools.sajivfrancis.com
+ALLOWED_ORIGINS=https://tools.sajivfrancis.com,https://chat.sajivfrancis.com,https://sajivfrancis.com,https://www.sajivfrancis.com
 EOF
 chmod 600 /opt/tools/tools.env
 ```

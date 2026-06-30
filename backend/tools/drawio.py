@@ -434,5 +434,12 @@ def to_drawio(req: ConvertRequest):
         xml = mermaid_to_drawio(req.mermaid)
     except ValueError as e:
         raise HTTPException(422, str(e))
+    except Exception as e:  # noqa: BLE001 — never leak a naked 500
+        # A parser edge case must not produce an unhandled 500: Starlette emits
+        # those from ServerErrorMiddleware *outside* the CORS layer, so they reach
+        # the browser with no Access-Control-Allow-Origin and surface as an opaque
+        # CORS failure. Convert to a handled error (HTTPException responses pass
+        # back through CORSMiddleware and keep their headers).
+        raise HTTPException(500, f"draw.io conversion failed: {type(e).__name__}")
     slug = re.sub(r"[^a-z0-9-]+", "-", req.filename.lower()).strip("-") or "diagram"
     return {"filename": f"{slug}.drawio", "drawio": xml}
