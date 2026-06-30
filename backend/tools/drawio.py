@@ -244,12 +244,17 @@ def _layout(nodes, edges, direction):
             return sum(vals) / len(vals) if vals else cur[n]  # keep stable if no link
         ids.sort(key=key)
 
-    # 4. alternate down/up barycenter passes
+    # 4. alternate down/up barycenter passes. Layer keys can be sparse: a cyclic
+    # graph (A->B and B->A) makes longest-path layering not converge, leaving gaps
+    # (e.g. layer 2 empty while maxlv=5). Skip absent layers instead of indexing
+    # order[lv] directly, which would KeyError on the gap.
     for _ in range(4):
         for lv in range(1, maxlv + 1):
-            _bary(order[lv], {n: i for i, n in enumerate(order.get(lv - 1, []))}, preds)
+            if lv in order:
+                _bary(order[lv], {n: i for i, n in enumerate(order.get(lv - 1, []))}, preds)
         for lv in range(maxlv - 1, -1, -1):
-            _bary(order[lv], {n: i for i, n in enumerate(order.get(lv + 1, []))}, succs)
+            if lv in order:
+                _bary(order[lv], {n: i for i, n in enumerate(order.get(lv + 1, []))}, succs)
 
     # 5. positions — center each layer on the widest layer's axis
     GAP_MAIN, GAP_CROSS = 150, 200
