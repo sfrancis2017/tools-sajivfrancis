@@ -12,6 +12,7 @@ box is dropped). Chained edges (`A --> B --> C`) and labeled edges are handled.
 from __future__ import annotations
 
 import html
+import logging
 import re
 from collections import Counter
 
@@ -19,6 +20,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 router = APIRouter()
+log = logging.getLogger("tools.drawio")
 
 # Public, unauthenticated endpoint — bound the Mermaid source so the parser /
 # layout can't be driven to exhaust CPU/memory with a giant graph.
@@ -439,7 +441,10 @@ def to_drawio(req: ConvertRequest):
         # those from ServerErrorMiddleware *outside* the CORS layer, so they reach
         # the browser with no Access-Control-Allow-Origin and surface as an opaque
         # CORS failure. Convert to a handled error (HTTPException responses pass
-        # back through CORSMiddleware and keep their headers).
+        # back through CORSMiddleware and keep their headers) — but log the full
+        # traceback + the offending source so the real bug is debuggable from the
+        # journal even though the client only sees a clean message.
+        log.exception("drawio conversion crashed on source:\n%s", req.mermaid)
         raise HTTPException(500, f"draw.io conversion failed: {type(e).__name__}")
     slug = re.sub(r"[^a-z0-9-]+", "-", req.filename.lower()).strip("-") or "diagram"
     return {"filename": f"{slug}.drawio", "drawio": xml}
